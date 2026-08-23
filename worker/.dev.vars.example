@@ -1,0 +1,9 @@
+# cp .dev.vars.example .dev.vars で使う。
+# wrangler dev だけが読み、deploy ではアップロードされない。
+ISSUER=http://localhost:8787
+DEV_AUTH_BYPASS=1
+
+# 本番の Google OAuth を使わずにローカルでログインを試すときだけ設定する。
+# 通常は DEV_AUTH_BYPASS=1 で足りる。
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=

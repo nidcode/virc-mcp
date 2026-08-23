@@ -80,32 +80,57 @@ IdP を足したり替えたりすると subject が変わるため、直結に�
 `identities (provider, subject) → athlete_id` の間接層が D1 にあります。
 検証済みメールが一致する場合は同じ athlete に束ねます（未検証メールでは束ねません）。
 
-## デプロイ前のチェックリスト
+## デプロイ
 
-```bash
-# 1. リソースを作って wrangler.jsonc の REPLACE_BEFORE_DEPLOY を差し替える
-npx wrangler kv namespace create OAUTH_KV
-npx wrangler d1 create coach-users
-npx wrangler d1 execute coach-users --remote --file=schema.sql
+### 済み（2026-08-23）
 
-# 2. Google OAuth（承認済みリダイレクト URI に https://<host>/callback を登録）
-npx wrangler secret put GOOGLE_CLIENT_ID   --env production
-npx wrangler secret put GOOGLE_CLIENT_SECRET --env production
-
-# 3. ISSUER を本番ホストに（wrangler.jsonc の env.production.vars）
-
-# 4. ★ production の vars に DEV_AUTH_BYPASS を入れないこと
-#    （入っても localhost 以外では効かないが、入れる理由が無い）
-
-npm run deploy
+```
+URL       https://coach-graph.nidstyle3.workers.dev
+KV        OAUTH_KV   594d33ece479464ba9f0ee7ef235a1b9
+D1        coach-users e700a6a2-d890-42d8-b12c-7dc601bd2924（athletes / identities 作成済み）
+ISSUER    https://coach-graph.nidstyle3.workers.dev
 ```
 
-## 挙動の注意
+### 残り: Google OAuth
 
-`completeAuthorization` の `revokeExistingGrants` は既定 true です。
-**同じ client_id で再認可すると、前のグラントとトークンが失効します。**
-Claude / ChatGPT は接続のたびに新しいクライアントを登録するので実害はありませんが、
-プリレジスト済みクライアントを使う場合は意識してください。
+これが無いと `/mcp` は 401 のまま、`/authorize` は「未設定」画面になります。
+
+1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials) で
+   「OAuth クライアント ID を作成」→ **ウェブアプリケーション**
+2. **承認済みのリダイレクト URI** に次を登録（末尾のスラッシュ無し）:
+   ```
+   https://coach-graph.nidstyle3.workers.dev/callback
+   ```
+3. OAuth 同意画面: 外部 / スコープは `openid` `email` `profile` の3つだけ
+4. 発行された値を Secrets に入れる:
+   ```bash
+   cd worker
+   npx wrangler secret put GOOGLE_CLIENT_ID
+   npx wrangler secret put GOOGLE_CLIENT_SECRET
+   ```
+   Secrets は即時反映されるので再デプロイは不要です。
+
+### 環境変数の置き場
+
+**`env.production` は使いません。** wrangler は `vars` を環境に継承しないため、
+`DEV_AUTH_BYPASS` のようなローカル専用フラグが本番に紛れ込む事故を招きます。
+
+| | 置き場 | デプロイされるか |
+|---|---|---|
+| `ISSUER`（本番） | `wrangler.jsonc` の `vars` | される |
+| `ISSUER`（ローカル）· `DEV_AUTH_BYPASS` | `.dev.vars` | **されない** |
+| `GOOGLE_CLIENT_*` | `wrangler secret` | 暗号化して保管 |
+
+`.dev.vars` は git 管理外です。`.dev.vars.example` を複製して使ってください。
+
+### カスタムドメインに移すとき
+
+1. `wrangler.jsonc` の `vars.ISSUER` を新ホストに変更
+2. `routes` を追加（`{ "pattern": "coach.example.com", "custom_domain": true }`）
+3. Google の承認済みリダイレクト URI に `https://<新ホスト>/callback` を追加
+4. `npx wrangler deploy`
+
+**ISSUER と実際のホストが一致していないと OAuth のディスカバリが壊れます。**
 
 ## 未実装
 

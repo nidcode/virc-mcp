@@ -12,30 +12,22 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AthleteGraph"] }],
 
-  // OAuth のトークン・クライアント・グラントの保管先
-  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_BEFORE_DEPLOY" }],
+  // OAuth のトークン・クライアント・グラント・セッションの保管先
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "594d33ece479464ba9f0ee7ef235a1b9" }],
 
-  // 横断テーブル（identities → athlete_id）
+  // 横断テーブル（identities → athlete_id）。選手データは DO 側にある
   "d1_databases": [{
     "binding": "USERS_DB",
     "database_name": "coach-users",
-    "database_id": "REPLACE_BEFORE_DEPLOY"
+    "database_id": "e700a6a2-d890-42d8-b12c-7dc601bd2924"
   }],
 
+  // ★ここは本番の値。ローカルでは .dev.vars が上書きする。
+  //   環境（env.production）は使わない —— vars が継承されず、
+  //   ローカル専用フラグが本番に紛れ込む事故を招くため。
+  //   DEV_AUTH_BYPASS はここに書かない。.dev.vars にだけ置く。
   "vars": {
-    "ISSUER": "http://localhost:8787",
-    // ★ローカル専用。1 のときだけ認証をスルーする。
-    //   本番の vars には絶対に入れないこと（入っても localhost 以外では効かない実装にしてある）
-    "DEV_AUTH_BYPASS": "1"
-  },
-
-  "env": {
-    "production": {
-      "vars": { "ISSUER": "https://coach.example.com" },
-      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_BEFORE_DEPLOY" }],
-      "d1_databases": [{ "binding": "USERS_DB", "database_name": "coach-users", "database_id": "REPLACE_BEFORE_DEPLOY" }],
-      "durable_objects": { "bindings": [{ "name": "GRAPH", "class_name": "AthleteGraph" }] }
-    }
+    "ISSUER": "https://coach-graph.nidstyle3.workers.dev"
   },
 
   "observability": { "enabled": true }
