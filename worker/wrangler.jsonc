@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "coach-graph",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  // global_fetch_strictly_public は CIMD（Client ID Metadata Document）の取得に必要
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": "./public", "binding": "ASSETS", "not_found_handling": "none" },
+
+  "durable_objects": {
+    "bindings": [{ "name": "GRAPH", "class_name": "AthleteGraph" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AthleteGraph"] }],
+
+  // OAuth のトークン・クライアント・グラントの保管先
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_BEFORE_DEPLOY" }],
+
+  // 横断テーブル（identities → athlete_id）
+  "d1_databases": [{
+    "binding": "USERS_DB",
+    "database_name": "coach-users",
+    "database_id": "REPLACE_BEFORE_DEPLOY"
+  }],
+
+  "vars": {
+    "ISSUER": "http://localhost:8787",
+    // ★ローカル専用。1 のときだけ認証をスルーする。
+    //   本番の vars には絶対に入れないこと（入っても localhost 以外では効かない実装にしてある）
+    "DEV_AUTH_BYPASS": "1"
+  },
+
+  "env": {
+    "production": {
+      "vars": { "ISSUER": "https://coach.example.com" },
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_BEFORE_DEPLOY" }],
+      "d1_databases": [{ "binding": "USERS_DB", "database_name": "coach-users", "database_id": "REPLACE_BEFORE_DEPLOY" }],
+      "durable_objects": { "bindings": [{ "name": "GRAPH", "class_name": "AthleteGraph" }] }
+    }
+  },
+
+  "observability": { "enabled": true }
+}

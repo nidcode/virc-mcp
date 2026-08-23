@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "coach-memory": {
+      "command": "node",
+      "args": ["/Users/niida/project/niida/myskill/coach-memory/server.js"]
+    }
+  }
+}

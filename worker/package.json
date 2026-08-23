@@ -1,0 +1,20 @@
+{
+  "name": "coach-graph-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "node ../node_modules/typescript/bin/tsc -p . --noEmit && node --test test/*.test.js",
+    "db:local": "wrangler d1 execute coach-users --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute coach-users --remote --file=schema.sql",
+    "deploy": "wrangler deploy --env production"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260823.1",
+    "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.10.3"
+  }
+}

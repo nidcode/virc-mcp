@@ -1,0 +1,9 @@
+{
+  // worker/src は workerd の型。DOM / @types/node と衝突するので別プロジェクトにする。
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"],
+    "lib": ["es2023"]
+  },
+  "include": ["src/**/*.ts", "../core/**/*.ts"]
+}
