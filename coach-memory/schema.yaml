@@ -1,0 +1,113 @@
+# ==========================================================================
+#  Coach Memory — オントロジー定義 v0.1
+#  「その選手固有で、かつ厳密でなければならないもの」だけを型にする。
+#  運動生理学・トレーニング理論は LLM の重みに任せ、ここには入れない。
+# ==========================================================================
+
+meta:
+  version: 0.1
+  bitemporal: true          # valid_time（世界で成立していた期間）と
+                            # assertion_time（我々が知っていた期間）を必ず分ける
+
+# --- 共通フィールド -------------------------------------------------------
+common:
+  id:            {type: string, pattern: "^(pf|c|rt|d|p|q|g)_[0-9]{2,}$"}
+  valid_time:    {from: date, to: date|null}
+  assertion_time: {from: date, to: date|null}
+  provenance:
+    source:
+      enum:
+        - athlete_report      # 選手の事実申告（曜日・故障・環境・体調）
+        - athlete_estimate    # 選手の経験則に基づく数値見積もり
+        - athlete_preference  # 選好・やりやすさ
+        - primary_measured    # デバイス/API の一次実測（COROS, Strava）
+        - external_primary    # 大会公式記録・医師の所見など外部一次情報
+        - proxy_derived       # 実測からの換算・補正（VDOT換算など）
+        - coach_inference     # コーチの推論・判断・確率見積もり
+    reliability_prior:        # 衝突時の既定の優先順位（実測で更新可）
+      primary_measured:   0.95
+      external_primary:   0.95
+      athlete_report:     0.90
+      athlete_estimate:   0.75   # ← 2026-08-22 の実証により proxy より上に置く
+      athlete_preference: 0.90
+      proxy_derived:      0.45
+      coach_inference:    0.35
+    quoted_from: string|null    # コーチが選手の発言を言い換えた場合、元の発言者
+  status:
+    enum: [active, superseded, retracted, dormant]
+  confidence: {type: float, range: [0,1]}
+  needs_confirmation: bool
+
+# --- 型定義 ---------------------------------------------------------------
+
+profile:                    # 緩やかに変化する事実
+  fields: [key, value, unit, provenance, valid_time]
+
+constraint:                 # 規範（Norm）。事実ではない。
+  fields:
+    - statement
+    - modality: {enum: [MUST, MUST_NOT, SHOULD, SHOULD_NOT]}
+    - severity: {enum: [absolute, strong, soft]}
+    - justified_by: [ref]     # response_tendency | event | external_authority
+    - overridable_by: string|null   # absolute は必ず null
+    - valid_until: date|null        # ★期限付き制約。失効時に deferred 案を再浮上させる
+  invariant: "severity=absolute の制約に違反する提案は、生成時点で拒否する"
+
+response_tendency:          # 素因（Disposition）。実現条件を持つ。
+  fields:
+    - statement
+    - borne_by: string        # athlete | 部位（正規語彙）
+    - trigger:                # ★評価可能な述語であること
+        predicate: string     # 例 "weekly_km_delta_pct >= 15 AND consecutive_weeks >= 2"
+        draft: string|null    # 述語化できない場合の自然文（要 operationalize）
+    - realizes: {process_type, latency}
+    - scope: {phase: [..], season: [..], not_applicable_when: [..]}
+    - evidence: {supporting: [ref], refuting: [ref]}
+    - superseded_by: ref|null
+  identity: "(borne_by, trigger.predicate の正規形, realizes.process_type)"
+  decay: "6ヶ月間 supporting が増えなければ status: dormant（削除はしない）"
+
+decision:                   # コーチの判断（CognitiveAct）
+  fields:
+    - question
+    - context: {}             # 判断時点の状態スナップショット（後の検証に必須）
+    - choice
+    - rationale
+    - rejected_options: [{option, reason, deferred_until}]   # ★却下案も残す
+    - grounded_in: [ref]      # state / profile
+    - applies: [ref]          # ★どの response_tendency を根拠にしたか
+    - issues: ref             # prediction（1:1）
+    - refutation: {date, reason, superseded_by}
+    - derived_lesson: string|null
+
+prediction:                 # 検証可能な主張
+  fields:
+    - claim
+    - adjudication_criterion  # ★反証条件。書けない予測は記録しない
+    - review_on: date
+    - status: {enum: [pending, confirmed, refuted, unadjudicable]}
+    - observed: string|null
+  invariant: "adjudication_criterion と review_on の無い prediction は書き込み拒否"
+
+conflict:                   # ★選手とコーチの主張が衝突した記録（最高価値）
+  fields:
+    - proposition
+    - claim_athlete: {value, provenance, rationale}
+    - claim_coach:   {value, provenance, rationale}
+    - primary_data:  string|null
+    - verdict: {enum: [athlete_correct, coach_correct, both_partial, open]}
+    - downstream_contamination: [ref]   # この誤りから派生した記録
+  rule: "verdict が確定したら response_tendency の証拠として必ず昇格提案する"
+
+open_question:              # 訊いたが答えが返っていない
+  fields:
+    - question
+    - why                     # 答えが何を決めるのか
+    - ask_when:
+        enum: [immediately, before_next_session, before_phase_change,
+               before_race_strategy, when_road_race_scheduled,
+               when_constraint_expires, when_travel_planning]
+    - status: {enum: [open, partially_answered, answered, obsolete]}
+
+gap:                        # 検出した矛盾・出所不明
+  fields: [issue, candidates, status, action]
