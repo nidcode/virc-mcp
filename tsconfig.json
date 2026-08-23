@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    // Node 24 と esbuild(wrangler) が .ts を直接実行する。tsc は型検査だけ。
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "lib": ["es2023", "dom"]
+  },
+  "include": ["core/**/*.ts", "coach-memory/lib/*.ts", "worker/test/**/*.ts"]
+}

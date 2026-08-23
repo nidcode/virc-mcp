@@ -1,0 +1,617 @@
+// ツール定義とハンドラの唯一の実装。ストレージは Store インターフェース越しに触る。
+// 契約は core/types.ts の `Store`。2つのバックエンドが型で縛られている。
+import type {
+  Store, ToolDef, WikiNode, NodeType, Front, Prediction, EmbeddedPrediction,
+  DownstreamRow, ProvenanceSource, DecisionFront,
+} from './types.ts';
+
+/** JSON-RPC から来る引数。ツールごとの必須項目は dispatch 内で検証する。 */
+type Args = Record<string, any>;
+
+export interface RecordDecisionArgs {
+  question: string; choice: string; rationale: string;
+  prediction: { claim: string; adjudication_criterion: string; review_on: string };
+  constraints_reviewed: string[];
+  constraint_compliance?: string;
+  context?: Record<string, unknown>;
+  applies?: string[];
+  rejected_options?: Array<{ option: string; reason: string; deferred_until?: string }>;
+  links?: string[];
+}
+export interface RetractClaimArgs {
+  id: string; reason: string; corrected_value: string;
+  derived_lesson?: string; downstream?: string[];
+}
+export interface RecordOutcomeArgs {
+  prediction_id: string;
+  status: 'confirmed' | 'refuted' | 'unadjudicable';
+  observed: string; derived_lesson?: string;
+  /** ★答え合わせが依存先の信念をどう動かすか。候補はサーバーが提示する。 */
+  downstream?: OutcomeEffect[];
+}
+export interface OutcomeEffect {
+  id: string;
+  /** 何が変わるか。変わらないなら「変更なし: 理由」と明示する */
+  effect: string;
+  /** 反応モデルの確信度を動かす場合 */
+  confidence?: number;
+}
+
+const cut = (s: unknown, n = 70): string => (s && String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s ?? ''));
+const plus = (d: string, n: number): string => new Date(Date.parse(d) + n * 86400000).toISOString().slice(0, 10);
+const L = (ids?: string[] | null): string => (ids || []).map((i) => `[[${i}]]`).join(' ');
+const isDate = (s?: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s ?? '');
+
+const P: Record<string, string> = {
+  constraint: 'c', response_tendency: 'rt', decision: 'd', analysis: 'an',
+  entity: 'e', conflict: 'cf',
+};
+const DIR: Record<string, string> = {
+  constraint: 'constraints', response_tendency: 'tendencies', decision: 'decisions',
+  analysis: 'analysis', entity: 'entities', conflict: 'conflicts',
+};
+export const TYPE_DIR = DIR;
+
+const PROVENANCE: ProvenanceSource[] = ['primary_measured', 'external_primary', 'athlete_report',
+  'athlete_estimate', 'proxy_derived', 'coach_inference'];
+
+export const TOOLS: ToolDef[] = [
+  { name: 'get_coach_briefing',
+    description: '会話の冒頭で必ず呼ぶ。禁則・基準値・反応モデル・撤回済みの主張・回収すべき予測・訊くべき質問を返す。読む前にコーチングを始めてはいけない。',
+    inputSchema: { type: 'object', properties: {
+      context: { type: 'string', description: '現在の話題。該当する保留質問が追加で返る' } } } },
+
+  { name: 'record_decision',
+    description: '練習内容・設定・戦略を提案したら必ず呼ぶ。反証条件と absolute 禁則の確認が無いと拒否される。',
+    inputSchema: { type: 'object', required: ['question','choice','rationale','prediction','constraints_reviewed'], properties: {
+      question: { type: 'string' }, choice: { type: 'string' }, rationale: { type: 'string' },
+      context: { type: 'object', description: '判断時点の状態スナップショット' },
+      prediction: { type: 'object', required: ['claim','adjudication_criterion','review_on'], properties: {
+        claim: { type: 'string' },
+        adjudication_criterion: { type: 'string', description: '★何が観測されたら誤りと判定するか' },
+        review_on: { type: 'string', description: 'YYYY-MM-DD' } } },
+      applies: { type: 'array', items: { type: 'string' }, description: '根拠にした反応モデルの id' },
+      rejected_options: { type: 'array', items: { type: 'object', properties: {
+        option: { type: 'string' }, reason: { type: 'string' }, deferred_until: { type: 'string' } } } },
+      links: { type: 'array', items: { type: 'string' }, description: '関連ページの id やページ名' },
+      constraints_reviewed: { type: 'array', items: { type: 'string' },
+        description: '★確認した absolute 禁則の id を全て列挙。漏れると拒否される' },
+      constraint_compliance: { type: 'string',
+        description: '★各 absolute 禁則に対し、この判断がどう抵触しないかを具体的に述べる。id の列挙だけでは不十分。20文字未満は拒否される' } } } },
+
+  { name: 'file_analysis',
+    description: '★良い分析・導出・比較をウィキに残す。会話履歴に消えさせない。後から何度も参照する結論はここに置く。',
+    inputSchema: { type: 'object', required: ['title','question','answer','body','provenance'], properties: {
+      title: { type: 'string', description: 'ページ名（短く）' }, question: { type: 'string' },
+      answer: { type: 'string' }, body: { type: 'string', description: 'markdown。一次データ・内訳・[[リンク]]を含める' },
+      provenance: { type: 'string', enum: PROVENANCE }, confidence: { type: 'number' },
+      supersedes: { type: 'array', items: { type: 'string' } } } } },
+
+  { name: 'record_memory',
+    description: '禁則・反応モデル・エンティティ・衝突（選手とコーチの主張が食い違った記録）を新しいページとして記録する。provenance は必須。根拠にした記録がある場合は front.evidence_refs に id を列挙すること（根拠が撤回されたときに波及を検出できる）。',
+    inputSchema: { type: 'object', required: ['type','title','body','provenance'], properties: {
+      type: { type: 'string', enum: ['constraint','response_tendency','entity','conflict'] },
+      title: { type: 'string' }, body: { type: 'string' },
+      provenance: { type: 'string', enum: PROVENANCE },
+      front: { type: 'object', description: '型固有の frontmatter（severity, valid_until, confidence, trigger, borne_by 等）' } } } },
+
+  { name: 'record_outcome',
+    description: '★予測の答え合わせ。記録して終わりではなく、依存している信念を動かすところまでが1回の操作。downstream を省いて呼ぶと、更新すべき候補が返る。confirmed / refuted / unadjudicable（検証できなかった場合に refuted を使わない）。',
+    inputSchema: { type: 'object', required: ['prediction_id','status','observed'], properties: {
+      prediction_id: { type: 'string' },
+      status: { type: 'string', enum: ['confirmed','refuted','unadjudicable'] },
+      observed: { type: 'string' }, derived_lesson: { type: 'string' },
+      downstream: { type: 'array', description: '★この答え合わせが各依存先をどう変えるか。省略すると候補が返る。変わらない場合も「変更なし: 理由」を書くこと',
+        items: { type: 'object', required: ['id','effect'], properties: {
+          id: { type: 'string' },
+          effect: { type: 'string', description: '何が変わるか。変わらないなら「変更なし: 理由」' },
+          confidence: { type: 'number', description: '反応モデルの確信度を動かす場合の新しい値' } } } } } } },
+
+  { name: 'retract_claim',
+    description: '判断が誤りと判明したときに呼ぶ。削除せず status: retracted にし、なぜ間違えたかを残す。以後 briefing の再提示禁止に載る。',
+    inputSchema: { type: 'object', required: ['id','reason','corrected_value'], properties: {
+      id: { type: 'string' }, reason: { type: 'string', description: '★なぜ間違えたか' },
+      corrected_value: { type: 'string' }, derived_lesson: { type: 'string' },
+      downstream: { type: 'array', items: { type: 'string' }, description: '連鎖撤回する id。省略時は候補を提示するだけ' } } } },
+
+  { name: 'update_page',
+    description: '既存ページの frontmatter を更新し、任意で本文にセクションを追記する。',
+    inputSchema: { type: 'object', required: ['id'], properties: {
+      id: { type: 'string' }, front: { type: 'object' }, append: { type: 'string' } } } },
+
+  { name: 'graph_downstream',
+    description: '★ある判断の誤りがどこまで波及しているかを辿る。汚染は順方向、依存は逆方向。撤回の影響範囲の特定に使う。',
+    inputSchema: { type: 'object', required: ['id'], properties: {
+      id: { type: 'string' }, max_depth: { type: 'number' } } } },
+
+  { name: 'tendency_record',
+    description: '★反応モデルの実績。根拠に使った判断とその予測の結果を返す。外れ続けるモデルを見つける。',
+    inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+
+  { name: 'lint_wiki',
+    description: '健康診断。未回収の予測・孤立ページ・失効した制約・証拠のない反応モデル・未検証の基準値を検出する。',
+    inputSchema: { type: 'object', properties: {} } },
+
+  { name: 'search_wiki',
+    description: 'ウィキ全文検索。★撤回済みのページは既定で除外される（撤回された知識を再利用しないため）。撤回の経緯を調べたいときだけ include_retracted を立てる。',
+    inputSchema: { type: 'object', required: ['query'], properties: {
+      query: { type: 'string' }, type: { type: 'string' },
+      include_retracted: { type: 'boolean', description: '撤回済みも含める（既定 false）' } } } },
+
+  { name: 'get_page',
+    description: 'ページ本文と、入出両方向のリンクを返す。',
+    inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+];
+
+// --------------------------------------------------------------------------
+
+/**
+ * ★MCP resources。接続先の LLM に schema 層とナビゲーションを公開する。
+ * これが無いと、リポジトリ外から MCP だけで繋いだ LLM は CLAUDE.md を読めず、
+ * 「規律あるウィキ維持者」にする設定が届かない。
+ */
+export const RESOURCES = [
+  { uri: 'coach://schema', name: 'コーチウィキの規約（CLAUDE.md）', mimeType: 'text/markdown',
+    description: '★会話の最初に必ず読むこと。三層構造・provenance の規律・予測の反証条件・撤回の扱いが書かれている。これを読まずにコーチングを始めてはいけない。' },
+  { uri: 'coach://index', name: 'index — 全ページの目録', mimeType: 'text/markdown',
+    description: 'ウィキの全ページ。型別・一行要約つき。関連ページを探すときはまずここを読む。' },
+  { uri: 'coach://lint', name: '直近の健康診断', mimeType: 'text/markdown',
+    description: '未回収の予測・撤回済みへの依存・孤立ページ・未検証の基準値。' },
+];
+
+export async function readResource(store: Store, uri: string): Promise<string> {
+  if (uri === 'coach://schema') {
+    const md = await store.getSchema();
+    if (!md) throw new Error('schema が未登録です（seed で送られていない可能性があります）');
+    return md;
+  }
+  if (uri === 'coach://index') {
+    const all = (await store.listAll?.()) ?? [];
+    const by: Record<string, typeof all> = {};
+    for (const n of all) (by[n.type] ||= []).push(n);
+    const one = (n: (typeof all)[number]) => {
+      const m = n.body.match(/^#[^\n]*\n+([^\n#>|][^\n]{4,})/m);   // 見出し直後の最初の実文
+      return m ? cut(m[1]!.replace(/\[\[|\]\]|\*\*/g, ''), 72) : '';
+    };
+    const L = [`# index — ${all.length} ページ`, ''];
+    for (const [t, ns] of Object.entries(by)) {
+      L.push(`## ${t} (${ns.length})`, '');
+      for (const n of ns.sort((x, y) => x.id.localeCompare(y.id))) {
+        const tags = [];
+        if (n.status && n.status !== 'active') tags.push(`\`${n.status}\``);
+        if (n.front.confidence != null) tags.push(`conf ${n.front.confidence}`);
+        L.push(`- \`${n.id}\` **${n.label}**${tags.length ? ' — ' + tags.join(' · ') : ''}`
+          + (one(n) ? `\n  ${one(n)}` : ''));
+      }
+      L.push('');
+    }
+    return L.join('\n');
+  }
+  if (uri === 'coach://lint') {
+    const n = (await store.listAll?.() ?? []).find((x) => x.id === 'lint');
+    return n?.body ?? '（まだ lint を実行していません。lint_wiki を呼んでください）';
+  }
+  throw new Error(`unknown resource: ${uri}`);
+}
+
+export async function dispatch(store: Store, name: string, a: Args = {}): Promise<string> {
+  const now = await store.today();
+  const H: Record<string, () => Promise<string>> = {
+
+  async get_coach_briefing() {
+    const [cons, rts, all, preds, ath, qs] = await Promise.all([
+      store.listByType('constraint'), store.listByType('response_tendency'),
+      store.listAll?.() ?? [], store.listPredictions(),
+      store.listByType('athlete_profile'), store.listByType('question_queue')]);
+    const out = [`[BRIEFING ${now}]`];
+
+    const active = cons.filter((c) => c.status !== 'retracted'
+      && (!c.front?.valid_until || c.front.valid_until >= now))
+      .sort((x, y) => (x.front?.severity === 'absolute' ? -1 : 1));
+    out.push('禁則:');
+    for (const c of active) out.push(`  [${c.front?.severity === 'absolute' ? '!' : '-'}] ${c.id} ${cut(c.label, 44)}`
+      + (c.front?.valid_until ? `（〜${c.front.valid_until}）` : ''));
+
+    const base = (ath[0]?.body ?? '').matchAll(
+      /^\|\s*(hr_max_effective|threshold_pace|goal_race|vo2max)\s*\|\s*([^|]+)\|\s*`([^`]+)`\s*\|\s*([^|]*)\|/gm);
+    const rows = [...base];
+    if (rows.length) {
+      out.push('基準:');
+      for (const [, k, v, src, warn] of rows)
+        out.push(`  ${k} = ${v.trim()}${src === 'coach_inference' ? '（推論値）' : ''}${warn.trim() ? ' ' + warn.trim() : ''}`);
+    }
+
+    out.push('反応モデル:');
+    for (const r of rts.filter((r) => r.status !== 'retracted')
+      .sort((x, y) => (y.front?.confidence ?? 0) - (x.front?.confidence ?? 0)).slice(0, 5))
+      out.push(`  ${r.id} ${cut(r.label, 46)} (${r.front?.confidence ?? '?'})`);
+
+    const retr = (all.length ? all : [...cons, ...rts, ...await store.listByType('decision')])
+      .filter((p) => p.status === 'retracted');
+    if (retr.length) {
+      out.push('⚠再提示禁止（撤回済み）:');
+      for (const r of retr) out.push(`  ${r.id} ${cut(r.label, 40)}`
+        + (r.front?.corrected ? ` → 正: ${cut(r.front.corrected, 28)}` : ''));
+    }
+
+    const pending = preds.filter((p) => p.status === 'pending');
+    const due = pending.filter((p) => p.review_on <= now);
+    const soon = pending.filter((p) => p.review_on > now && p.review_on <= plus(now, 7));
+    if (due.length) {
+      out.push('要回収（期限到来）:');
+      for (const p of due) out.push(`  ${p.id} ${cut(p.claim, 46)} / 判定: ${cut(p.criterion, 44)}`);
+    }
+    if (soon.length) out.push(`予定: ${soon.map((p) => `${p.id}(${p.review_on})`).join(' ')}`);
+
+    for (const c of cons) {
+      const vu = c.front?.valid_until;
+      if (vu && vu >= now && vu <= plus(now, 14)) {
+        out.push(`⏳ ${c.id} が ${vu} に失効: ${cut(c.label, 40)}`);
+        if (c.front.on_expiry) out.push(`   → ${c.front.on_expiry}`);
+        for (const d of await store.listByType('decision'))
+          for (const m of (d.body ?? '').matchAll(/- \*\*(.+?)\*\*\n\s+- 理由: (.+?)\n\s+- 再検討: `(.+?)`/g))
+            if (m[3] === vu) out.push(`   保留案 (${d.id}): ${cut(m[1], 50)}`);
+      }
+    }
+
+    const q = qs[0];
+    if (q) {
+      const open = [...(q.body ?? '').matchAll(/### `(q_\d+)` (.+?)\n- なぜ: (.+?)\n- 訊く時期: `(.+?)`/g)]
+        .filter(([, , , , when]) => when === 'immediately' || (a.context && a.context.includes(when)));
+      if (open.length) {
+        out.push('訊くべき:');
+        for (const [, id, qq, why] of open.slice(0, 3)) out.push(`  ${id} ${cut(qq, 44)}（${cut(why, 38)}）`);
+      }
+    }
+    return out.join('\n')
+      + '\n\n規則: 撤回済みを根拠にしない / 推論値を事実として述べない / 提案したら record_decision（反証条件必須）';
+  },
+
+  async record_decision() {
+    const args = a as RecordDecisionArgs;
+    const p = args.prediction ?? ({} as RecordDecisionArgs['prediction']);
+    if (!p.claim || !p.adjudication_criterion || !p.review_on)
+      throw new Error('拒否: prediction.claim / adjudication_criterion / review_on は必須です。反証条件を書けない提案は記録できません。');
+    if (!isDate(p.review_on)) throw new Error('拒否: review_on は YYYY-MM-DD 形式で指定してください。');
+
+    const abs = (await store.listByType('constraint')).filter((c) =>
+      c.front?.severity === 'absolute' && c.status !== 'retracted'
+      && (!c.front.valid_until || c.front.valid_until >= now));
+    const seen = new Set(args.constraints_reviewed ?? []);
+    const missed = abs.filter((c) => !seen.has(c.id));
+    if (missed.length) throw new Error('拒否: 未確認の absolute 禁則があります。内容を確認し id を constraints_reviewed に含めて再送してください。\n'
+      + missed.map((c) => `  ${c.id}: ${c.label}`).join('\n'));
+    // ★id の列挙だけでは通さない。どう抵触しないかを言わせる。
+    // （意味的な照合ではない。違反の有無ではなく、violation が記録に残ることを担保する）
+    if (abs.length && (args.constraint_compliance ?? '').trim().length < 20)
+      throw new Error('拒否: constraint_compliance が必要です。id を並べるだけでは不十分で、'
+        + `この判断が次の禁則にどう抵触しないかを具体的に述べてください。\n`
+        + abs.map((c) => `  ${c.id}: ${c.label}`).join('\n'));
+
+    const did = await store.nextId('d'), pid = await store.nextId('p');
+    await store.put({
+      id: did, type: 'decision', label: args.question, status: 'active',
+      front: { id: did, type: 'decision', aliases: [did], date: now, status: 'active',
+        applies: args.applies ?? [], constraints_reviewed: [...seen],
+      constraint_compliance: args.constraint_compliance ?? null, context: args.context ?? null,
+        prediction: { id: pid, claim: p.claim, adjudication_criterion: p.adjudication_criterion,
+          review_on: p.review_on, status: 'pending', observed: null }, source: 'session' },
+      body: `# ${args.question}\n\n## 判断\n${args.choice}\n\n## 根拠\n${args.rationale}\n`
+        + (args.rejected_options?.length ? `\n## 却下した案\n${args.rejected_options.map((o) =>
+            `- **${o.option}**\n  - 理由: ${o.reason}\n  - 再検討: \`${o.deferred_until ?? '—'}\``).join('\n')}\n` : '')
+        + `\n## 予測 \`${pid}\`\n- 主張: ${p.claim}\n- **反証条件**: ${p.adjudication_criterion}\n- 検証日: \`${p.review_on}\` · 状態 \`pending\`\n`
+        + (a.applies?.length ? `\n## 根拠にした反応モデル\n${L(a.applies)}\n` : '')
+        + (seen.size ? `\n## 確認した禁則\n${L([...seen])}\n`
+            + (args.constraint_compliance ? `\n${args.constraint_compliance}\n` : '') : '')
+        + (args.links?.length ? `\n## 関連\n${L(args.links)}\n` : ''),
+    });
+    await store.putPrediction({ id: pid, owner: did, claim: p.claim,
+      criterion: p.adjudication_criterion, review_on: p.review_on, status: 'pending' });
+    await store.log('decision', `${did} ${args.question}`, `- ${cut(args.choice, 120)}\n- 予測 \`${pid}\` → ${p.review_on}`);
+    return `記録しました。\n  decision ${did} / prediction ${pid}（${p.review_on} に回収）`;
+  },
+
+  async file_analysis() {
+    const id = await store.nextId('an');
+    await store.put({
+      id, type: 'analysis', label: a.title, status: 'active',
+      front: { id, type: 'analysis', aliases: [a.title, id], question: a.question, answer: a.answer,
+        confidence: a.confidence ?? null, provenance: { source: a.provenance },
+        supersedes: a.supersedes ?? [], resolved_on: now, source: 'session' },
+      body: `# ${a.title}\n\n> **${a.answer}**\n\n${a.body}`,
+    }, { name: a.title });
+    await store.log('analysis', `${id} ${a.title}`, `- ${a.question}\n- → ${a.answer}`);
+    return `分析を残しました: ${id}「${a.title}」\n以後 [[${a.title}]] で参照できます。`;
+  },
+
+  async record_memory() {
+    const id = await store.nextId(P[a.type]);
+    await store.put({
+      id, type: a.type, label: a.title, status: 'active',
+      front: { id, type: a.type, aliases: [id, a.title], provenance: { source: a.provenance },
+        status: 'active', source: 'session', ...(a.front ?? {}) },
+      body: `# ${a.title}\n\n${a.body}`,
+    }, { name: a.type === 'entity' ? a.title : undefined });
+    await store.log(a.type, `${id} ${a.title}`, null);
+    return `${a.type} を ${id} として記録しました。`;
+  },
+
+  async record_outcome() {
+    const args = a as RecordOutcomeArgs;
+    const preds = await store.listPredictions();
+    const p = preds.find((x) => x.id === args.prediction_id);
+    if (!p) throw new Error(`${args.prediction_id} が見つかりません。`);
+
+    // ── この答え合わせが動かすべき依存先を、サーバー側で算出する ──
+    //    「どれを更新すべきか知らなかった」を成立させないため。
+    const owner = p.owner ? await store.get(p.owner) : null;
+    const all = (await store.listAll?.()) ?? [];
+    const cand = new Map<string, string>();
+    for (const t of (owner?.front as DecisionFront | undefined)?.applies ?? [])
+      cand.set(t, 'この判断が根拠にした反応モデル');
+    if (owner) for (const n of all) {
+      if (n.status === 'retracted') continue;
+      if (((n.front.evidence_refs as string[] | undefined) ?? []).includes(owner.id))
+        cand.set(n.id, `${owner.id} を根拠にしている`);
+    }
+
+    if (cand.size && !args.downstream) throw new Error(
+      `拒否: この答え合わせが動かす依存先を downstream で述べてください。\n`
+      + `記録するだけでは信念が更新されず、記憶が増えるだけになります。\n`
+      + `変わらない場合も「変更なし: 理由」と明示してください。\n\n候補:\n`
+      + [...cand].map(([id, why]) => {
+          const n = all.find((x) => x.id === id);
+          return `  ${id}  ${cut(n?.label, 44)}\n    （${why}${n?.front.confidence != null ? ` / 現在の確信度 ${n.front.confidence}` : ''}）`;
+        }).join('\n'));
+
+    const given = new Set((args.downstream ?? []).map((d) => d.id));
+    const missed = [...cand.keys()].filter((id) => !given.has(id));
+    if (missed.length) throw new Error(
+      `拒否: 依存先のうち ${missed.join(', ')} に触れていません。`
+      + `変わらないなら「変更なし: 理由」を書いてください。`);
+
+    // ── 予測の判定 ──
+    await store.putPrediction({ ...p, status: args.status, observed: args.observed,
+      adjudicated_on: now, derived_lesson: args.derived_lesson ?? null });
+    // ★putPrediction が owner の frontmatter を書き換えているので取り直す。
+    //   候補算出のために取った owner をそのまま使うと、判定を古い値で上書きしてしまう。
+    const fresh = p.owner ? await store.get(p.owner) : null;
+    if (fresh) await store.put({ ...fresh, body: fresh.body
+      + `\n## 答え合わせ \`${args.prediction_id}\` — ${args.status}（${now}）\n${args.observed}\n`
+      + (args.derived_lesson ? `\n**教訓**: ${args.derived_lesson}\n` : '') });
+
+    // ── ★依存先を実際に更新する ──
+    const applied: string[] = [];
+    for (const d of args.downstream ?? []) {
+      const target = await store.get(d.id);
+      if (!target) { applied.push(`⚠ ${d.id} が見つからない`); continue; }
+      const before = target.front.confidence;
+      await store.put({ ...target,
+        front: { ...target.front, updated: now,
+          ...(d.confidence != null ? { confidence: d.confidence } : {}) },
+        body: target.body
+          + `\n## ${args.prediction_id} の答え合わせを受けて（${now}）\n`
+          + `予測は **${args.status}**。${d.effect}\n`
+          + (d.confidence != null ? `\n確信度 ${before ?? '—'} → **${d.confidence}**\n` : '') });
+      applied.push(d.confidence != null
+        ? `${d.id}（確信度 ${before ?? '—'} → ${d.confidence}）`
+        : `${d.id}`);
+    }
+
+    await store.log('outcome', `${args.prediction_id} → ${args.status}`,
+      `- ${args.observed}\n- 更新: ${applied.join(' / ') || 'なし'}`);
+
+    const done = (await store.listPredictions()).filter((x) => ['confirmed','refuted'].includes(x.status));
+    const hit = done.filter((x) => x.status === 'confirmed').length;
+    return `${args.prediction_id} → ${args.status}\n`
+      + `更新した依存先: ${applied.join(' / ') || 'なし'}\n`
+      + `通算的中率: ${done.length ? Math.round(100*hit/done.length) : 0}% (${hit}/${done.length})`;
+  },
+
+  async retract_claim() {
+    const args = a as RetractClaimArgs;
+    const n = await store.get(args.id);
+    if (!n) throw new Error(`${a.id} が見つかりません。`);
+    const cands = await store.downstream(a.id, 5);
+    const chain = a.downstream ?? [];
+    await store.put({ ...n, status: 'retracted',
+      front: { ...n.front, status: 'retracted', corrected: a.corrected_value,
+        refutation: { date: now, reason: a.reason },
+        ...(chain.length ? { downstream_contamination: chain } : {}) },
+      body: `# ${n.label}\n\n> ⛔ **撤回済み。この判断を根拠に使わない。**\n\n`
+        + `訂正後: **${a.corrected_value}**\n\n## なぜ間違えたか\n${a.reason}\n`
+        + (a.derived_lesson ? `\n## 教訓\n${a.derived_lesson}\n` : '')
+        + (chain.length ? `\n## この誤りから派生した記録\n${L(chain)}\n` : '')
+        + `\n---\n\n${n.body.replace(/^\s*#[^\n]*\n+/, '')}` });
+    let done = 0;
+    for (const id of chain) {
+      const d = await store.get(id);
+      if (d && d.status !== 'retracted') {
+        await store.put({ ...d, status: 'retracted',
+          front: { ...d.front, status: 'retracted', refutation: { date: now, reason: `${a.id} の誤りから派生` } },
+          body: `# ${d.label}\n\n> ⛔ **撤回済み（[[${a.id}]] の誤りから派生）**\n\n${d.body.replace(/^\s*#[^\n]*\n+/, '')}` });
+        done++;
+      }
+    }
+    await store.log('retract', `${a.id} → ${a.corrected_value}`, `- 原因: ${a.reason}\n- 連鎖撤回: ${done}件`);
+    const rest = cands.filter((c) => !chain.includes(c.id) && c.status !== 'retracted');
+    return `${a.id} を撤回しました（ページは保持）。連鎖撤回 ${done}件。\n`
+      + (rest.length ? `⚠ 波及の可能性がまだあります: ${rest.map((r) => `${r.id}(${r.via})`).join(' ')}\n`
+        + `  内容を確認し、必要なら downstream に含めて再実行してください。` : '他に波及先はありません。');
+  },
+
+  async update_page() {
+    const n = await store.get(a.id);
+    if (!n) throw new Error(`${a.id} が見つかりません。`);
+    await store.put({ ...n, front: { ...n.front, ...(a.front ?? {}), updated: now },
+      status: a.front?.status ?? n.status, body: a.append ? `${n.body}\n${a.append}\n` : n.body });
+    return `${a.id} を更新しました: ${Object.keys(a.front ?? {}).join(', ') || '本文'}`;
+  },
+
+  async graph_downstream() {
+    const r = await store.downstream(a.id, a.max_depth ?? 5);
+    return r.length
+      ? `${a.id} の波及先 ${r.length}件\n` + r.map((x) =>
+          `  depth${x.depth} [${x.via}] \`${x.id}\` ${cut(x.label, 42)} (${x.status})\n    経路: ${x.path}`).join('\n')
+      : `${a.id} に波及先はありません`;
+  },
+
+  async tendency_record() {
+    const decs = (await store.listByType('decision'))
+      .filter((d) => (d.front?.applies ?? []).includes(a.id));
+    if (!decs.length) return `${a.id} を根拠に使った判断はまだありません`;
+    const preds = await store.listPredictions();
+    const rows = decs.map((d) => ({ d, p: preds.find((x) => x.owner === d.id) }));
+    // 予測を持たない判断があるので、判定済みだけを型で絞る
+    const done = rows.filter((r): r is { d: typeof r.d; p: Prediction } =>
+      r.p !== undefined && (r.p.status === 'confirmed' || r.p.status === 'refuted'));
+    const hit = done.filter((r) => r.p.status === 'confirmed').length;
+    return `${a.id} を根拠にした判断 ${rows.length}件\n`
+      + rows.map((r) => `  \`${r.d.id}\` ${cut(r.d.label, 40)} → ${r.p?.id ?? '予測なし'} ${r.p?.status ?? ''}`).join('\n')
+      + `\n実績: ${done.length ? `${Math.round(100*hit/done.length)}% (${hit}/${done.length})` : '判定済み0件'}`;
+  },
+
+  async lint_wiki() {
+    const all = (await store.listAll?.()) ?? [];
+    const preds = await store.listPredictions();
+    const orph = await store.orphans();
+    const F: string[] = [];
+
+    // 未回収の予測
+    for (const p of preds)
+      if (p.status === 'pending' && p.review_on < now)
+        F.push(`⏰ 未回収の予測 \`${p.id}\`（期限 ${p.review_on}）— ${cut(p.claim, 50)}`);
+
+    const byId = new Map(all.map((n) => [n.id, n]));
+    const retracted = all.filter((n) => n.status === 'retracted');
+
+    // ★撤回済みを「根拠として」使ったまま生きている記録。
+    //   mentions は除く — 撤回済みを例や経緯として引くのは正しい振る舞いなので。
+    const STRUCTURAL = ['applies', 'reviewed', 'evidenced_by', 'supersedes', 'contaminated'];
+    for (const r of retracted) {
+      const node = await store.get(r.id);
+      for (const e of node?.in ?? []) {
+        if (!STRUCTURAL.includes(e.rel)) continue;
+        const dep = byId.get(e.src);
+        if (dep && dep.status !== 'retracted')
+          F.push(`☠ \`${dep.id}\` が撤回済みの \`${r.id}\` を ${e.rel} で根拠にしたまま — 見直すか撤回する`);
+      }
+    }
+
+    // ★撤回済みの結論を、撤回に触れずに断定しているページ。
+    //   「撤回された」と書いてあるページは正しく扱えているので除外する。
+    for (const r of retracted) {
+      for (const n of all) {
+        if (n.status === 'retracted' || n.id === r.id) continue;
+        if (!n.body.includes(r.id)) continue;
+        const assertive = /確定|唯一|裏付け|証明|判明した/.test(n.body);
+        const awareOfRetraction = /撤回|無効|測定不能|誤り/.test(n.body);
+        if (assertive && !awareOfRetraction)
+          F.push(`⚠ \`${n.id}\` が撤回済み \`${r.id}\` の結論を、撤回に触れずに断定している — 本文を確認する`);
+      }
+    }
+
+    // ★リンク切れ
+    const known = new Set<string>();
+    for (const n of all) {
+      known.add(n.id);
+      known.add(n.label);
+      for (const al of (n.front.aliases as string[] | undefined) ?? []) known.add(al);
+    }
+    const broken = new Set<string>();
+    for (const n of all)
+      for (const m of n.body.matchAll(/\[\[([^\]|]+)/g)) {
+        const t = m[1]!.trim().split('/').pop()!;
+        if (!known.has(t) && !known.has(m[1]!.trim())) broken.add(`${n.id} → [[${t}]]`);
+      }
+    for (const b of [...broken].slice(0, 10)) F.push(`🔗 リンク切れ ${b}`);
+
+    // ★provenance 欠落（schema が必須と定めているのに）
+    const noProv = all.filter((n) =>
+      !['lint', 'question_queue'].includes(n.type) && !n.front.provenance);
+    if (noProv.length)
+      F.push(`🏷 provenance の無いページ ${noProv.length}/${all.length}件 — `
+        + noProv.slice(0, 8).map((n) => `\`${n.id}\``).join(' ')
+        + (noProv.length > 8 ? ' …' : ''));
+
+    // 失効した制約
+    for (const c of await store.listByType('constraint'))
+      if (c.front.valid_until && c.front.valid_until < now && c.status === 'active')
+        F.push(`📅 失効済みの制約 \`${c.id}\`（${c.front.valid_until}）— status を更新するか保留案を再検討する`);
+
+    // 反応モデルの健康度
+    for (const r of await store.listByType('response_tendency')) {
+      if (/## 証拠\n- （なし）/.test(r.body ?? ''))
+        F.push(`🧪 証拠の無い反応モデル \`${r.id}\` — 昇格させるか削除するか判断が要る`);
+      if (r.front.needs_operationalization || r.front.trigger?.draft)
+        F.push(`⚙ 発火条件が未述語化 \`${r.id}\` — 現在の状態から自動判定できない`);
+      if (!(r.front.evidence_refs as string[] | undefined)?.length)
+        F.push(`🔍 \`${r.id}\` に evidence_refs が無い — 根拠が撤回されても波及を検出できない`);
+    }
+
+    // ★確信度が実績と乖離している反応モデル
+    //   （信念が更新されていないことの直接の証拠）
+    const decs = await store.listByType('decision');
+    for (const r of await store.listByType('response_tendency')) {
+      const used = decs.filter((d) => (d.front.applies ?? []).includes(r.id));
+      if (!used.length) {
+        if (r.status !== 'retracted')
+          F.push(`💤 \`${r.id}\` は一度も判断の根拠に使われていない — 使われない信念は複利しない`);
+        continue;
+      }
+      const rows = used.map((d) => preds.find((x) => x.owner === d.id))
+        .filter((x): x is NonNullable<typeof x> => !!x && ['confirmed','refuted'].includes(x.status));
+      if (rows.length < 2) continue;
+      const hit = rows.filter((x) => x.status === 'confirmed').length;
+      const rate = hit / rows.length;
+      const conf = r.front.confidence;
+      if (conf != null && Math.abs(conf - rate) > 0.3)
+        F.push(`📉 \`${r.id}\` の確信度 ${conf} に対し実績 ${Math.round(rate*100)}%（${hit}/${rows.length}）— `
+          + `信念が実績で更新されていない`);
+    }
+
+    // 未検証の基準値
+    const ath = await store.listByType('athlete_profile');
+    for (const m of (ath[0]?.body ?? '').matchAll(
+      /^\|\s*(\w+)\s*\|[^|]+\|\s*`(coach_inference|proxy_derived|unknown)`\s*\|\s*⚠?要?確認?/gm))
+      F.push(`❓ 未検証の基準値 \`${m[1]}\`（${m[2]}）— 確定事実として使わない`);
+
+    for (const o of orph) F.push(`🕳 孤立ページ \`${o.id}\` [${o.type}] ${cut(o.label, 40)}`);
+
+    const report = `# lint — ${now}\n\n` + (F.length ? F.map((f) => `- ${f}`).join('\n') : '- 指摘なし');
+
+    // ★結果をページとして残す（原文: lint も進化の一部）
+    await store.put({
+      id: 'lint', type: 'lint', label: `lint — ${now}`, status: 'active',
+      front: { id: 'lint', type: 'lint', updated: now, findings: F.length,
+        provenance: { source: 'coach_inference' } },
+      body: report,
+    }, { name: 'lint' });
+    await store.log('lint', `${F.length}件の指摘`, F.slice(0, 5).map((f) => `- ${f}`).join('\n'));
+
+    return report;
+  },
+
+  async search_wiki() {
+    const r = await store.search(a.query, 10, a.type, a.include_retracted === true);
+    if (!r.length) return a.include_retracted ? '該当なし' : '該当なし（撤回済みは除外している。include_retracted で含められる）';
+    return r.map((x) => {
+      const flag = x.status === 'retracted' ? ' ⛔撤回済み — 根拠に使わない' : '';
+      return `[${x.type}] \`${x.id}\` ${x.label}${flag}\n  …${x.ctx}…`;
+    }).join('\n\n');
+  },
+
+  async get_page() {
+    const n = await store.get(a.id);
+    if (!n) throw new Error(`${a.id} が見つかりません。`);
+    return `# ${n.label} (\`${n.id}\`, ${n.type}, ${n.status})\n`
+      + `provenance: ${n.front?.provenance?.source ?? '—'}\n`
+      + `→ ${n.out.map((e) => `${e.rel}:${e.dst}`).join(' ') || 'なし'}\n`
+      + `← ${n.in.map((e) => `${e.rel}:${e.src}`).join(' ') || 'なし'}\n\n${n.body}`;
+  },
+  };
+
+  const h = H[name];
+  if (!h) throw new Error(`unknown tool: ${name}`);
+  return await h();
+}

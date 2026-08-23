@@ -1,0 +1,13 @@
+node_modules/
+.wrangler/
+.DS_Store
+*.log
+
+# Claude Code のローカル設定（許可リストなど。個人設定なので共有しない）
+.claude/settings.local.json
+
+# ── ローカルの開発用インスタンス ──────────────────────────────
+# coach/ は Durable Object 1つ分のランタイム状態に相当する。
+# 本番ではユーザーごとに DO が1つずつあり、リポジトリ側には存在しない。
+# 製品としての schema は schema/ にある。
+coach/
