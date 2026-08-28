@@ -19,7 +19,7 @@ if (cli) {
   console.error('usage: server.js [--briefing|--lint|--index]'); process.exit(1);
 }
 
-const server = new Server({ name: 'coach-memory', version: '0.3.0' }, { capabilities: { tools: {}, resources: {} } });
+const server = new Server({ name: 'coach-memory', title: 'コーチの記憶', version: '0.5.0' }, { capabilities: { tools: {}, resources: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: RESOURCES }));
 server.setRequestHandler(ReadResourceRequestSchema, async (req) => ({

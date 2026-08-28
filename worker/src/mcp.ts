@@ -22,7 +22,20 @@ export const mcpHandler = {
     if (msg.method === 'initialize') return reply({
       protocolVersion: msg.params?.protocolVersion ?? '2025-06-18',
       capabilities: { tools: {}, resources: {} },   // ★schema 層を公開する
-      serverInfo: { name: 'coach-memory', version: '0.4.0' } });
+      serverInfo: {
+        name: 'coach-memory',
+        title: 'コーチの記憶',
+        version: '0.5.0',
+        websiteUrl: env.ISSUER,
+        // MCP SEP-973（2025-11-25 以降）の icons。
+        // claude.ai のカスタムコネクタは 2026-08 時点で未対応（常に地球儀）だが、
+        // 対応クライアントでは表示される。data URI にして外部取得を不要にしてある。
+        icons: [
+          { src: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCIgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4Ij48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHJ4PSIxMCIgZmlsbD0iIzBmMTExNSIvPjxnIHN0cm9rZT0iIzJmNmJkOCIgc3Ryb2tlLXdpZHRoPSIxLjYiIG9wYWNpdHk9Ii44NSI+PHBhdGggZD0iTTI0IDE1IEwxNSAyNyBNMjQgMTUgTDMzIDI3IE0xNSAyNyBMMjQgMzYgTTMzIDI3IEwyNCAzNiBNMTUgMjcgTDMzIDI3Ii8+PC9nPjxnIGZpbGw9IiM1YjhkZWUiPjxjaXJjbGUgY3g9IjI0IiBjeT0iMTUiIHI9IjQiLz48Y2lyY2xlIGN4PSIxNSIgY3k9IjI3IiByPSIzLjIiLz48Y2lyY2xlIGN4PSIzMyIgY3k9IjI3IiByPSIzLjIiLz48Y2lyY2xlIGN4PSIyNCIgY3k9IjM2IiByPSIzLjIiLz48L2c+PGNpcmNsZSBjeD0iMzMiIGN5PSIyNyIgcj0iMy4yIiBmaWxsPSIjMjJjNTVlIi8+PGNpcmNsZSBjeD0iMTUiIGN5PSIyNyIgcj0iMy4yIiBmaWxsPSIjZWY0NDQ0Ii8+PC9zdmc+',
+            mimeType: 'image/svg+xml', sizes: ['any'] },
+          { src: `${env.ISSUER}/icon.svg`, mimeType: 'image/svg+xml', sizes: ['any'] },
+        ],
+      } });
     if (msg.method?.startsWith('notifications/')) return new Response(null, { status: 202 });
     if (msg.method === 'ping') return reply({});
     if (msg.method === 'tools/list') return reply({ tools: TOOLS });
