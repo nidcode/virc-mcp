@@ -1,9 +1,16 @@
 // ローカルのウィキ → 起動中の Worker(DO) に投入する。
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as W from '../lib/wiki.js';
 
-const URL_ = process.env.WORKER_URL || 'http://localhost:8787';
+// 本番へ投入するときは .coach-token（auth.js が取得）の Bearer を付ける。
+// ローカルは DEV_AUTH_BYPASS で素通しなので認証不要。
+const TOKEN_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.coach-token');
+const saved = fs.existsSync(TOKEN_FILE) ? JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8')) : null;
+const URL_ = process.env.WORKER_URL || (process.env.COACH_PROD === '1' && saved?.host) || 'http://localhost:8787';
+const AUTH = URL_.startsWith('https://') && saved?.access_token
+  ? { authorization: `Bearer ${saved.access_token}` } : {};
 const pages = W.listPages();
 const label = (p) => (p.body.match(/^#\s+(.+)$/m) ?? [, p.front.id])[1];
 const nodes = pages.map((p) => ({
@@ -18,11 +25,11 @@ const predictions = W.predictions().map((p) => ({
   review_on: p.review_on, status: p.status ?? 'pending', observed: p.observed ?? null }));
 
 const res = await fetch(`${URL_}/api/seed`, { method: 'POST',
-  headers: { 'content-type': 'application/json' },
+  headers: { 'content-type': 'application/json', ...AUTH },
   body: JSON.stringify({ nodes, predictions,
     schema: [path.join(W.ROOT, 'CLAUDE.md'), path.join(W.ROOT, '..', 'schema', 'CLAUDE.md')]
       .filter(fs.existsSync).map((f) => fs.readFileSync(f, 'utf8'))[0],   // ★schema 層
     reset: process.env.SEED_APPEND !== '1' }) });
 if (!res.ok) { console.error(`HTTP ${res.status}`, await res.text()); process.exit(1); }
-console.log(`seeded → ${URL_}`);
+console.log(`seeded → ${URL_}${AUTH.authorization ? '（Bearer 認証）' : '（ローカル）'}`);
 console.log(JSON.stringify(await res.json(), null, 1));

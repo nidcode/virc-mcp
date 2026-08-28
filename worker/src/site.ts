@@ -27,6 +27,19 @@ padding:11px 22px;font-size:14px;cursor:pointer;text-decoration:none;margin-top:
 .sub{background:#252a35}</style><div class="card">${body}</div>`,
   { headers: { 'content-type': 'text/html; charset=utf-8' } });
 
+/** Authorization: Bearer を OAuthProvider に検証させて identity に変える。 */
+async function bearerIdentity(env: Env, request: Request): Promise<Identity | null> {
+  const h = request.headers.get('authorization');
+  if (!h?.startsWith('Bearer ')) return null;
+  try {
+    const t = await env.OAUTH_PROVIDER.unwrapToken<Partial<Identity>>(h.slice(7).trim());
+    const p = t?.grant?.props;   // props は grant の下にある
+    if (!p?.athleteId || !p.provider || !p.subject) return null;
+    return { provider: p.provider, subject: p.subject, email: p.email ?? null,
+      athleteId: p.athleteId, displayName: p.displayName };
+  } catch { return null; }
+}
+
 export const siteHandler = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const u = new URL(request.url);
@@ -151,10 +164,13 @@ export const siteHandler = {
       return new Response(null, { status: 302, headers: { location: '/' } });
     }
 
-    // ── ブラウザ用 API（Cookie セッション。ローカルはバイパス可） ──
+    // ── 読み取り API ────────────────────────────────────────────
+    //   ブラウザは Cookie セッション、CLI や外部ツールは Bearer トークン。
+    //   どちらも同じ identity に解決する。ローカルのみバイパス可。
     if (u.pathname.startsWith('/api/')) {
       const identity = devBypassEnabled(request, env)
-        ? DEV_IDENTITY : await session.read(env, request);
+        ? DEV_IDENTITY
+        : (await bearerIdentity(env, request)) ?? (await session.read(env, request));
       if (!identity) return J({ error: 'unauthorized', login: '/login' }, 401);
       const store = doStore(graphFor(env, identity));
       if (u.pathname === '/api/graph') return J(await store.graph());

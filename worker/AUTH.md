@@ -91,7 +91,25 @@ D1        coach-users e700a6a2-d890-42d8-b12c-7dc601bd2924（athletes / identiti
 ISSUER    https://coach-graph.nidstyle3.workers.dev
 ```
 
-### 残り: Google OAuth
+Google OAuth 設定済み（2026-08-28）。ログイン → 選手作成 → ウィキ移行まで確認済み。
+
+### CLI から本番を触る
+
+裏口は無いので、正規の OAuth 経路でトークンを取ります。
+
+```bash
+node coach-memory/tools/auth.js          # DCR → 認可 → PKCE 交換
+                                          # ブラウザにセッションがあればクリック不要
+COACH_PROD=1 node coach-memory/tools/seed.js   # 本番の自分の DO に投入
+```
+
+トークンは `.coach-token`（git 管理外・0600）に保存されます。1時間で失効するので、
+切れたら `auth.js` を再実行してください。
+
+`/api/*` は Cookie セッションと Bearer の両方を受けます。
+ブラウザはセッション、CLI や外部ツールは Bearer。どちらも同じ identity に解決します。
+
+### 参考: Google OAuth の設定手順
 
 これが無いと `/mcp` は 401 のまま、`/authorize` は「未設定」画面になります。
 

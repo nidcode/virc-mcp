@@ -6,6 +6,9 @@ node_modules/
 # wrangler のローカル専用変数（秘密が入りうる）
 .dev.vars
 
+# CLI が取得した本番アクセストークン
+.coach-token
+
 # Claude Code のローカル設定（許可リストなど。個人設定なので共有しない）
 .claude/settings.local.json
 
