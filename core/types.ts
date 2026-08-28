@@ -210,6 +210,12 @@ export interface Store {
    * これが無いと、リポジトリ外から MCP だけで繋いだ LLM は規約を読めない。
    */
   getSchema(): MaybePromise<string | null>;
+  /**
+   * ★briefing を読んだ時刻の記録と取得（ISO 文字列）。
+   * MCP はサーバー側から会話の区切りが見えないので、時間で「読んだことにする」。
+   */
+  markBriefing(): MaybePromise<void>;
+  lastBriefingAt(): MaybePromise<string | null>;
   /** ローカル版のみ。index.md の再生成。 */
   reindex?(): MaybePromise<number>;
 }

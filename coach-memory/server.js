@@ -4,8 +4,10 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema,
-  ListResourcesRequestSchema, ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { TOOLS, dispatch, RESOURCES, readResource } from '../core/tools.ts';
+  ListResourcesRequestSchema, ReadResourceRequestSchema,
+  ListPromptsRequestSchema, GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { TOOLS, dispatch, RESOURCES, readResource,
+  INSTRUCTIONS, PROMPTS, getPrompt } from '../core/tools.ts';
 import { fsStore } from './lib/fs-store.ts';
 
 const WRITES = new Set(['record_decision','file_analysis','record_memory',
@@ -19,8 +21,10 @@ if (cli) {
   console.error('usage: server.js [--briefing|--lint|--index]'); process.exit(1);
 }
 
-const server = new Server({ name: 'coach-memory', title: 'コーチの記憶', version: '0.5.0' }, { capabilities: { tools: {}, resources: {} } });
+const server = new Server({ name: 'coach-memory', title: 'コーチの記憶', version: '0.5.0' }, { capabilities: { tools: {}, resources: {}, prompts: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: PROMPTS }));
+server.setRequestHandler(GetPromptRequestSchema, async (req) => getPrompt(req.params.name));
 server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: RESOURCES }));
 server.setRequestHandler(ReadResourceRequestSchema, async (req) => ({
   contents: [{ uri: req.params.uri, mimeType: 'text/markdown',

@@ -158,6 +158,17 @@ export const fsStore = {
       .map((p) => ({ id: p.front.id, type: p.front.type, label: label(p) }));
   },
 
+  markBriefing(): void {
+    fs.writeFileSync(path.join(W.ROOT, '.state.json'),
+      JSON.stringify({ last_briefing: new Date().toISOString() }), 'utf8');
+  },
+  lastBriefingAt(): string | null {
+    const f = path.join(W.ROOT, '.state.json');
+    if (!fs.existsSync(f)) return null;
+    try { return JSON.parse(fs.readFileSync(f, 'utf8')).last_briefing ?? null; }
+    catch { return null; }
+  },
+
   getSchema(): string | null {
     // 実体（このウィキ）の live copy を優先。無ければ製品の既定テンプレート。
     // 本番の DO も config.schema に live copy を持ち、seed で既定が入る。同じ意味論。

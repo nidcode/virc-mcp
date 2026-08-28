@@ -82,6 +82,14 @@ export class AthleteGraph {
   }
 
   // --- 読み取り ---------------------------------------------------------
+  markBriefing() {
+    this.q(`INSERT OR REPLACE INTO config VALUES ('last_briefing', ?)`, new Date().toISOString());
+  }
+  lastBriefingAt() {
+    const r = this.q(`SELECT v FROM config WHERE k='last_briefing'`)[0];
+    return r ? r.v : null;
+  }
+
   getSchema() {
     const r = this.q(`SELECT v FROM config WHERE k='schema'`)[0];
     return r ? r.v : null;

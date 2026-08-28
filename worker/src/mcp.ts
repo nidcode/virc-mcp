@@ -1,5 +1,6 @@
 // 保護された /mcp。OAuthProvider が検証済みの identity を ctx.props に入れて呼ぶ。
-import { TOOLS, dispatch, RESOURCES, readResource } from '../../core/tools.ts';
+import { TOOLS, dispatch, RESOURCES, readResource,
+  INSTRUCTIONS, PROMPTS, getPrompt } from '../../core/tools.ts';
 import { doStore } from './do-store.ts';
 import { fromProps, graphFor, unauthorized } from './auth/identity.ts';
 import type { Env } from './env.d.ts';
@@ -21,7 +22,8 @@ export const mcpHandler = {
 
     if (msg.method === 'initialize') return reply({
       protocolVersion: msg.params?.protocolVersion ?? '2025-06-18',
-      capabilities: { tools: {}, resources: {} },   // ★schema 層を公開する
+      capabilities: { tools: {}, resources: {}, prompts: {} },
+      instructions: INSTRUCTIONS,   // ★システムプロンプトの代わりに使える唯一の欄
       serverInfo: {
         name: 'coach-memory',
         title: 'コーチの記憶',
@@ -39,6 +41,11 @@ export const mcpHandler = {
     if (msg.method?.startsWith('notifications/')) return new Response(null, { status: 202 });
     if (msg.method === 'ping') return reply({});
     if (msg.method === 'tools/list') return reply({ tools: TOOLS });
+    if (msg.method === 'prompts/list') return reply({ prompts: PROMPTS });
+    if (msg.method === 'prompts/get') {
+      try { return reply(getPrompt(msg.params.name)); }
+      catch (e: any) { return J({ jsonrpc: '2.0', id: msg.id, error: { code: -32602, message: e.message } }); }
+    }
     if (msg.method === 'resources/list') return reply({ resources: RESOURCES });
     if (msg.method === 'resources/read') {
       const store = doStore(graphFor(env, identity));

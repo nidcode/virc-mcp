@@ -52,6 +52,78 @@ const DIR: Record<string, string> = {
 };
 export const TYPE_DIR = DIR;
 
+/**
+ * ★コーチとしての振る舞い。briefing の返り値と instructions で運ぶ。
+ * MCP にはシステムプロンプトを注入する経路が無く、確実に届くのは
+ * ツールの description と返り値だけなので、ここに載せる。
+ */
+export const PROTOCOL = `あなたはこの選手の専属コーチです。一般論を述べる相手ではなく、
+上の記憶を持っているコーチとして振る舞ってください。
+
+## 手順
+1. 期限の来た予測があれば、他の話題より先に結果を訊く
+2. 現状を評価する（COROS / Strava から取得。記憶の数値と食い違ったら黙って上書きせず明示する）
+3. 処方する。提案は必ず「何を狙うか」「何が起きたら誤りか」「いつ見直すか」を含む
+4. record_decision で記録する（反証条件と禁則の確認が必須）
+5. 結果が出たら record_outcome。依存する反応モデルを動かすところまでが1回の操作
+
+## 出所の優先順位
+実測 > 本人の申告 > 本人の経験則 > 代理データからの換算 > コーチの推論
+
+- 本人が経験を根拠に数値を出したら、換算で覆さない。覆すには一次データが要る
+- 自分の推論を「本人の申告」として記録しない。最も重大な事故です
+- （推論値）と付いた基準値を、確定事実として述べない
+
+## してはいけないこと
+- 上の「再提示禁止」に載っている主張を持ち出す
+- 反証条件を書けない提案をする
+- absolute 禁則（[!] 印）に抵触する提案をする
+- 断定の強さを根拠の強さより上げる。代理データ1本で強い結論を出さない
+
+## 訊き方
+質問は「訊くべき」に出たものだけ。それ以外は溜めて、必要な時期に訊く。`;
+
+/** initialize の応答に載せる。仕様上「LLM の理解を助けるため」の欄。 */
+export const INSTRUCTIONS = `このサーバーは、ひとりのランナーについての永続的なコーチング記憶です。
+
+**会話の最初に必ず get_coach_briefing を呼んでください。** 禁則・基準値・撤回済みの主張・
+回収すべき予測が返ります。これを読まずに記録系のツールを呼ぶと拒否されます。
+
+${PROTOCOL}`;
+
+/** claude.ai などがコネクタの入口として同期する。 */
+export const PROMPTS = [
+  { name: 'coach_session', title: '今日の練習を相談する',
+    description: '記憶を読み込んでから、今日〜今週の練習を相談する。期限の来た予測があれば先に回収する。' },
+  { name: 'report_result', title: '練習結果を報告する',
+    description: '実施した練習の結果を報告し、予測の答え合わせと信念の更新まで行う。' },
+  { name: 'weekly_review', title: '週次レビュー',
+    description: '未回収の予測・撤回済みへの依存・孤立ページなどを点検し、記憶を健康に保つ。' },
+];
+
+export function getPrompt(name: string): { description: string; messages: Array<{ role: 'user'; content: { type: 'text'; text: string } }> } {
+  const head = 'まず get_coach_briefing を呼んで、記憶を読み込んでください。\n\n';
+  const body: Record<string, string> = {
+    coach_session: head
+      + '読み終えたら、期限の来た予測があれば先に結果を訊いてください。\n'
+      + 'そのうえで COROS / Strava から直近の状態を取得し、今日〜今週の練習を提案してください。\n'
+      + '提案したら record_decision で記録すること（反証条件と禁則の確認が必須）。',
+    report_result: head
+      + '読み終えたら、回収すべき予測を提示して、どれの結果かを確認してください。\n'
+      + 'record_outcome で答え合わせをします。**記録して終わりではありません** — '
+      + 'その結果が依存する反応モデルをどう動かすかまで述べてください（downstream 必須）。',
+    weekly_review: head
+      + 'そのあと lint_wiki を呼んで、記憶の健康状態を点検してください。\n'
+      + '未回収の予測、撤回済みを根拠にしたままの記録、証拠のない反応モデル、\n'
+      + '一度も使われていない反応モデル、未検証の基準値。\n'
+      + '指摘ごとに、直すか・保留するか・なぜ保留するかを述べてください。',
+  };
+  const text = body[name];
+  if (!text) throw new Error(`unknown prompt: ${name}`);
+  return { description: PROMPTS.find((p) => p.name === name)!.description,
+    messages: [{ role: 'user', content: { type: 'text', text } }] };
+}
+
 const PROVENANCE: ProvenanceSource[] = ['primary_measured', 'external_primary', 'athlete_report',
   'athlete_estimate', 'proxy_derived', 'coach_inference'];
 
@@ -194,6 +266,13 @@ export async function readResource(store: Store, uri: string): Promise<string> {
   throw new Error(`unknown resource: ${uri}`);
 }
 
+/** 記憶を書き換えるツール。briefing を読んでいないと拒否する。 */
+const WRITE_TOOLS = new Set([
+  'record_decision', 'record_outcome', 'retract_claim',
+  'file_analysis', 'record_memory', 'update_page',
+]);
+const BRIEFING_TTL_MIN = 30;
+
 export async function dispatch(store: Store, name: string, a: Args = {}): Promise<string> {
   const now = await store.today();
   const H: Record<string, () => Promise<string>> = {
@@ -263,8 +342,8 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
         for (const [, id, qq, why] of open.slice(0, 3)) out.push(`  ${id} ${cut(qq, 44)}（${cut(why, 38)}）`);
       }
     }
-    return out.join('\n')
-      + '\n\n規則: 撤回済みを根拠にしない / 推論値を事実として述べない / 提案したら record_decision（反証条件必須）';
+    await store.markBriefing();   // ★読んだ時刻を記録。書き込み系ツールがこれを見る
+    return out.join('\n') + '\n\n---\n' + PROTOCOL;
   },
 
   async record_decision() {
@@ -613,5 +692,18 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
 
   const h = H[name];
   if (!h) throw new Error(`unknown tool: ${name}`);
+
+  // ★記憶を書き換えるツールは、briefing を読んでいないと拒否する。
+  //   禁則・撤回済みの主張・回収すべき予測を知らないまま判断を残させないため。
+  //   読み取り（search_wiki / get_page / graph_downstream 等）は自由に通す。
+  if (WRITE_TOOLS.has(name)) {
+    const at = await store.lastBriefingAt();
+    const ageMin = at ? (Date.now() - Date.parse(at)) / 60000 : Infinity;
+    if (!(ageMin <= BRIEFING_TTL_MIN)) throw new Error(
+      `拒否: get_coach_briefing をまだ読んでいません`
+      + (at ? `（最後に読んだのは ${Math.round(ageMin)} 分前。${BRIEFING_TTL_MIN}分で切れます）` : '')
+      + `。\n禁則・撤回済みの主張・回収すべき予測を知らないまま記録を残さないでください。\n`
+      + `先に get_coach_briefing を呼んでから、このツールを再実行してください。`);
+  }
   return await h();
 }
