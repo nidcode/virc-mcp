@@ -40,15 +40,17 @@ export interface OutcomeEffect {
 const cut = (s: unknown, n = 70): string => (s && String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s ?? ''));
 const plus = (d: string, n: number): string => new Date(Date.parse(d) + n * 86400000).toISOString().slice(0, 10);
 const L = (ids?: string[] | null): string => (ids || []).map((i) => `[[${i}]]`).join(' ');
+const W_SLUG = (s: string): string =>
+  String(s).replace(/[\/\\:*?"<>|\n#[\]]/g, '').trim().slice(0, 24);
 const isDate = (s?: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s ?? '');
 
 const P: Record<string, string> = {
   constraint: 'c', response_tendency: 'rt', decision: 'd', analysis: 'an',
-  entity: 'e', conflict: 'cf',
+  entity: 'e', conflict: 'cf', note: 'n',
 };
 const DIR: Record<string, string> = {
   constraint: 'constraints', response_tendency: 'tendencies', decision: 'decisions',
-  analysis: 'analysis', entity: 'entities', conflict: 'conflicts',
+  analysis: 'analysis', entity: 'entities', conflict: 'conflicts', note: 'notes',
 };
 export const TYPE_DIR = DIR;
 
@@ -60,28 +62,56 @@ export const TYPE_DIR = DIR;
 export const PROTOCOL = `あなたはこの選手の専属コーチです。一般論を述べる相手ではなく、
 上の記憶を持っているコーチとして振る舞ってください。
 
+## ⛔ 選手に見せてはいけないもの
+**c_01 / rt_06 / d_11 のような記録IDを、返答の文章に書かないこと。**
+IDはツールを呼ぶための道具であって、選手には無関係です。
+
+  ✗「c_01 の禁則があるので火曜は避けます」
+  ○「火木の夜は用事があるので、そこは外します」
+  ✗「rt_03 より、暑熱下では…」
+  ○「夏場は心拍が適正でもペースが保てなくなるので…」
+
+内部の仕組みを尋ねられたときだけ例外です。
+
+## 気づいたら、その場で remember を呼ぶ
+選手が何か言うたびに、記録に値するかを考えてください。**会話の終わりまで待たない。**
+生活の制約、好み、体の反応、練習環境、性格の癖、こちらの推測 — 迷ったら残す。
+\`remember\` は検証なしで必ず通ります。1回の会話で何度呼んでもかまいません。
+
+**指示されてから記録するのでは遅い。** 選手は記録を頼む役ではありません。
+
+## 処方する前に、過去を見る
+\`get_history\` で、そのテーマについて過去に何を決め、何が起きたかを確認してください。
+**直近のデータだけで判断しない。** 同じことを前に試していないか、そのとき何が起きたかを
+知らずに提案しないこと。
+
 ## 手順
 1. 期限の来た予測があれば、他の話題より先に結果を訊く
-2. 現状を評価する（COROS / Strava から取得。記憶の数値と食い違ったら黙って上書きせず明示する）
-3. 処方する。提案は必ず「何を狙うか」「何が起きたら誤りか」「いつ見直すか」を含む
-4. record_decision で記録する（反証条件と禁則の確認が必須）
-5. 結果が出たら record_outcome。依存する反応モデルを動かすところまでが1回の操作
+2. 現状を評価する（COROS / Strava。記憶の数値と食い違ったら黙って上書きせず明示する）
+3. **\`get_history\` で経緯を確認する**
+4. 処方する。提案は「何を狙うか」「何が起きたら誤りか」「いつ見直すか」を必ず含む
+5. \`record_decision\` で記録する（反証条件と禁則の確認が必須）
+6. 結果が出たら \`record_outcome\`。依存する信念を動かすところまでが1回の操作
 
 ## 出所の優先順位
 実測 > 本人の申告 > 本人の経験則 > 代理データからの換算 > コーチの推論
 
 - 本人が経験を根拠に数値を出したら、換算で覆さない。覆すには一次データが要る
 - 自分の推論を「本人の申告」として記録しない。最も重大な事故です
-- （推論値）と付いた基準値を、確定事実として述べない
+- 「推論値」と付いた基準値を、確定事実として述べない
 
 ## してはいけないこと
-- 上の「再提示禁止」に載っている主張を持ち出す
+- 記録IDを返答に書く
+- 「再提示禁止」に載っている主張を持ち出す
 - 反証条件を書けない提案をする
-- absolute 禁則（[!] 印）に抵触する提案をする
-- 断定の強さを根拠の強さより上げる。代理データ1本で強い結論を出さない
+- 絶対禁則に抵触する提案をする
+- 過去を見ずに直近のデータだけで処方する
+- 断定の強さを根拠の強さより上げる
 
 ## 訊き方
 質問は「訊くべき」に出たものだけ。それ以外は溜めて、必要な時期に訊く。`;
+
+
 
 /** initialize の応答に載せる。仕様上「LLM の理解を助けるため」の欄。 */
 export const INSTRUCTIONS = `このサーバーは、ひとりのランナーについての永続的なコーチング記憶です。
@@ -158,6 +188,23 @@ export const TOOLS: ToolDef[] = [
       answer: { type: 'string' }, body: { type: 'string', description: 'markdown。一次データ・内訳・[[リンク]]を含める' },
       provenance: { type: 'string', enum: PROVENANCE }, confidence: { type: 'number' },
       supersedes: { type: 'array', items: { type: 'string' } } } } },
+
+  { name: 'remember',
+    description: '★選手について何か分かったら、その場で呼ぶ。会話の終わりまで待たない。'
+      + '検証は一切なく、必ず記録される。判断や提案ではなく「分かったこと」を落とすためのもの。'
+      + '生活の制約、好み、体の反応、練習環境、性格の癖、こちらの推測 — 迷ったら残す。'
+      + '会話1回につき何度呼んでもよい。あとで週次レビューで正式な型に整理する。',
+    inputSchema: { type: 'object', required: ['what'], properties: {
+      what: { type: 'string', description: '分かったこと。選手の言葉に近い形で' },
+      kind: { type: 'string', enum: ['observation','preference','constraint_hint','context'],
+        description: 'observation=体や練習の反応 / preference=好み・やりやすさ / constraint_hint=制約になりそうなこと / context=生活・仕事・環境' },
+      why: { type: 'string', description: 'なぜ残す価値があるか（任意）' } } } },
+
+  { name: 'get_history',
+    description: '★処方する前に呼ぶ。あるテーマについて過去に何を決め、何を予測し、実際どうなったかを時系列で返す。'
+      + '直近のデータだけで判断しないため。「同じことを前にも試したか」「そのとき何が起きたか」を知らずに提案しない。',
+    inputSchema: { type: 'object', required: ['topic'], properties: {
+      topic: { type: 'string', description: 'テーマ（例: 閾値走、距離走の設定、渡航、故障、レース戦略）' } } } },
 
   { name: 'record_memory',
     description: '禁則・反応モデル・エンティティ・衝突（選手とコーチの主張が食い違った記録）を新しいページとして記録する。provenance は必須。根拠にした記録がある場合は front.evidence_refs に id を列挙すること（根拠が撤回されたときに波及を検出できる）。',
@@ -267,6 +314,8 @@ export async function readResource(store: Store, uri: string): Promise<string> {
 }
 
 /** 記憶を書き換えるツール。briefing を読んでいないと拒否する。 */
+// ★remember は含めない。捕捉を止めてはいけない。
+//   briefing 未読でも「分かったこと」は必ず残せるようにする。
 const WRITE_TOOLS = new Set([
   'record_decision', 'record_outcome', 'retract_claim',
   'file_analysis', 'record_memory', 'update_page',
@@ -282,7 +331,47 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
       store.listByType('constraint'), store.listByType('response_tendency'),
       store.listAll?.() ?? [], store.listPredictions(),
       store.listByType('athlete_profile'), store.listByType('question_queue')]);
-    const out = [`[BRIEFING ${now}]`];
+    const out = [
+      `[BRIEFING ${now}]`,
+      '⛔ 以下の記録ID（c_01 / rt_06 など）は道具です。選手への返答に書かないこと。',
+    ];
+
+    // ── 季節の文脈。直近のデータだけで判断しないための足場 ──
+    const goal = (ath[0]?.body ?? '').match(/goal_race[^|]*\|([^|]*)\|/)?.[1] ?? '';
+    const raceDate = goal.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
+    if (raceDate) {
+      const d = Math.round((Date.parse(raceDate) - Date.parse(now)) / 86400000);
+      out.push(`目標: ${cut(goal.trim(), 52)}`);
+      out.push(`  レースまで ${d}日（${Math.floor(d / 7)}週+${d % 7}日）`);
+    }
+    const planPage = (await store.listByType('plan'))[0];
+    if (planPage) {
+      for (const m of planPage.body.matchAll(/^\|\s*([^|]+?)\s*\|\s*(\d{1,2}\/\d{1,2})[^\d]+(\d{1,2}\/\d{1,2})\s*\|/gm)) {
+        const y = now.slice(0, 4);
+        const iso = (md: string) => `${y}-${md.split('/').map((v) => v.padStart(2, '0')).join('-')}`;
+        if (iso(m[2]!) <= now && now <= iso(m[3]!)) {
+          out.push(`  現在のフェーズ: ${m[1]!.trim()}（${m[2]}〜${m[3]}）`);
+          break;
+        }
+      }
+    }
+
+    // ── 予測の実績。信念がどれだけ当たってきたか ──
+    const allPreds = await store.listPredictions();
+    const judged = allPreds.filter((x) => ['confirmed', 'refuted'].includes(x.status));
+    if (judged.length) {
+      const h = judged.filter((x) => x.status === 'confirmed').length;
+      out.push(`  これまでの予測: ${h}/${judged.length} 的中`);
+    }
+
+    // ── 未整理のメモ ──
+    const notes = (await store.listByType('note')).filter((n) => !n.front.filed);
+    if (notes.length) {
+      out.push(`未整理のメモ ${notes.length}件（週次レビューで正式な記録に整理する）:`);
+      for (const n of notes.slice(0, 5)) out.push(`  ・${cut(n.label, 56)}`);
+      if (notes.length > 5) out.push(`  ・ほか ${notes.length - 5}件`);
+    }
+
 
     const active = cons.filter((c) => c.status !== 'retracted'
       && (!c.front?.valid_until || c.front.valid_until >= now))
@@ -401,6 +490,55 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
     }, { name: a.title });
     await store.log('analysis', `${id} ${a.title}`, `- ${a.question}\n- → ${a.answer}`);
     return `分析を残しました: ${id}「${a.title}」\n以後 [[${a.title}]] で参照できます。`;
+  },
+
+  async remember() {
+    const id = await store.nextId('n');
+    const kind = a.kind ?? 'observation';
+    await store.put({
+      id, type: 'note', label: cut(a.what, 60), status: 'active',
+      front: { id, type: 'note', kind, filed: false, date: now,
+        provenance: { source: 'athlete_report' }, source: 'session' },
+      body: `# ${a.what}\n\n分類: ${kind}\n記録: ${now}\n`
+        + (a.why ? `\n## なぜ残すか\n${a.why}\n` : ''),
+    }, { name: `${id}-${W_SLUG(a.what)}` });
+    await store.log('note', cut(a.what, 60), a.why ?? null);
+    return `覚えました。`;   // ★id を返さない。返すとそのまま選手に伝えられてしまう
+  },
+
+  async get_history() {
+    const decs = await store.listByType('decision');
+    const preds = await store.listPredictions();
+    const q = String(a.topic).toLowerCase();
+    const hit = decs.filter((d) =>
+      (d.label + d.body).toLowerCase().includes(q))
+      .sort((x, y) => String(x.front.date ?? '').localeCompare(String(y.front.date ?? '')));
+    if (!hit.length) return `「${a.topic}」に関する過去の判断はまだありません。`;
+
+    const L = [`「${a.topic}」の経緯（古い順に ${hit.length} 件）`, ''];
+    for (const d of hit) {
+      const p = preds.find((x) => x.owner === d.id);
+      const mark = d.status === 'retracted' ? '⛔ 撤回済み — ' : '';
+      L.push(`${d.front.date ?? '日付不明'}  ${mark}${d.label}`);
+      const choice = (d.body.match(/## 判断\n([\s\S]*?)(?:\n##|$)/) ?? [, ''])[1]
+        .replace(/~~/g, '').replace(/\*\*/g, '').replace(/\s*\n\s*/g, ' / ').trim();
+      if (choice) L.push(`  決めたこと: ${cut(choice, 100)}`);
+      if (p) {
+        L.push(`  予測: ${cut(p.claim, 80)}`);
+        L.push(`  結果: ${p.status === 'pending' ? `未回収（${p.review_on} 期限）`
+          : `${p.status}${p.observed ? ' — ' + cut(p.observed, 70) : ''}`}`);
+      }
+      const lesson = (d.body.match(/## 教訓\n([\s\S]*?)(?:\n##|$)/) ?? [, ''])[1].trim();
+      if (lesson) L.push(`  教訓: ${cut(lesson, 100)}`);
+      L.push('');
+    }
+    const done = hit.map((d) => preds.find((x) => x.owner === d.id))
+      .filter((p) => p && ['confirmed','refuted'].includes(p.status));
+    if (done.length) {
+      const hitn = done.filter((p) => p!.status === 'confirmed').length;
+      L.push(`このテーマでの的中: ${hitn}/${done.length}`);
+    }
+    return L.join('\n');
   },
 
   async record_memory() {
@@ -654,6 +792,11 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
     for (const m of (ath[0]?.body ?? '').matchAll(
       /^\|\s*(\w+)\s*\|[^|]+\|\s*`(coach_inference|proxy_derived|unknown)`\s*\|\s*⚠?要?確認?/gm))
       F.push(`❓ 未検証の基準値 \`${m[1]}\`（${m[2]}）— 確定事実として使わない`);
+
+    const unfiled = (await store.listByType('note')).filter((n) => !n.front.filed);
+    if (unfiled.length >= 3)
+      F.push(`🗂 未整理のメモが ${unfiled.length}件 — 正式な型（禁則・反応モデル・エンティティ）に昇格させるか、`
+        + `不要なら filed: true にして畳む`);
 
     for (const o of orph) F.push(`🕳 孤立ページ \`${o.id}\` [${o.type}] ${cut(o.label, 40)}`);
 

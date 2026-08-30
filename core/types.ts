@@ -5,6 +5,7 @@ export type MaybePromise<T> = T | Promise<T>;
 
 export type NodeType =
   | 'constraint' | 'response_tendency' | 'decision' | 'analysis' | 'conflict'
+  | 'note'   // 気づいたその場で落とすメモ。検証なしで書ける。あとで昇格させる
   | 'entity' | 'athlete_profile' | 'question_queue' | 'lint' | 'plan';
 
 export type Status = 'active' | 'retracted' | 'superseded' | 'dormant';
@@ -117,12 +118,21 @@ export interface ConflictFront extends BaseFront {
   supports?: string[];
 }
 
+/** 会話中に落とすメモ。検証をかけず、確実に残ることを優先する。 */
+export interface NoteFront extends BaseFront {
+  type: 'note';
+  kind?: 'observation' | 'preference' | 'constraint_hint' | 'context';
+  filed?: boolean;      // 正式な型に昇格したか
+  filed_as?: string;
+}
+
 export interface GenericFront extends BaseFront {
   type: 'entity' | 'athlete_profile' | 'question_queue' | 'lint' | 'plan';
 }
 
 export type Front =
-  | ConstraintFront | TendencyFront | DecisionFront | AnalysisFront | ConflictFront | GenericFront;
+  | ConstraintFront | TendencyFront | DecisionFront | AnalysisFront | ConflictFront
+  | NoteFront | GenericFront;
 
 /** type から front の型を引く。listByType が返すノードを絞り込むために使う。 */
 export type FrontFor<T extends NodeType> =
@@ -130,7 +140,8 @@ export type FrontFor<T extends NodeType> =
   T extends 'response_tendency' ? TendencyFront :
   T extends 'decision' ? DecisionFront :
   T extends 'analysis' ? AnalysisFront :
-  T extends 'conflict' ? ConflictFront : GenericFront;
+  T extends 'conflict' ? ConflictFront :
+  T extends 'note' ? NoteFront : GenericFront;
 
 export interface TypedNode<T extends NodeType> extends WikiNode {
   type: T;
