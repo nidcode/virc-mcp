@@ -44,6 +44,24 @@ const W_SLUG = (s: string): string =>
   String(s).replace(/[\/\\:*?"<>|\n#[\]]/g, '').trim().slice(0, 24);
 const isDate = (s?: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s ?? '');
 
+/**
+ * ★record_outcome の refuted 誤用ガード（TASKS.md P2）。
+ * 「そもそも実施・検証されなかった」ことを示す語を検知する。
+ * 「できなかった」単体のような、正当な refuted（例: ペースを維持できなかった）にも
+ * 現れる汎用語は含めない — 過検知で正しい refuted まで拒否してしまうため。
+ * 「実施できなかった」「開催されなかった」のように、行為そのものが成立しなかった
+ * ことを示す組み合わせだけを狙い撃ちする。
+ */
+const UNADJUDICABLE_HINTS: Array<string | RegExp> = [
+  '延期', '中止', 'キャンセル', '順延', '見送り', '未実施', '欠場', '中断',
+  /実施(?:でき(?:ず|なかった)|され(?:ず|なかった)|せず)/,
+  /開催(?:でき(?:ず|なかった)|され(?:ず|なかった)|中止)/,
+  /行(?:われ|え)なかった/,
+  /\bDNS\b/i,
+];
+const looksUnadjudicable = (observed: string): boolean =>
+  UNADJUDICABLE_HINTS.some((h) => (typeof h === 'string' ? observed.includes(h) : h.test(observed)));
+
 const P: Record<string, string> = {
   constraint: 'c', response_tendency: 'rt', decision: 'd', analysis: 'an',
   entity: 'e', conflict: 'cf', note: 'n',
@@ -217,7 +235,7 @@ export const TOOLS: ToolDef[] = [
       front: { type: 'object', description: '型固有の frontmatter（severity, valid_until, confidence, trigger, borne_by 等）' } } } },
 
   { name: 'record_outcome',
-    description: '★予測の答え合わせ。記録して終わりではなく、依存している信念を動かすところまでが1回の操作。downstream を省いて呼ぶと、更新すべき候補が返る。confirmed / refuted / unadjudicable（検証できなかった場合に refuted を使わない）。',
+    description: '★予測の答え合わせ。記録して終わりではなく、依存している信念を動かすところまでが1回の操作。downstream を省いて呼ぶと、更新すべき候補が返る。confirmed / refuted / unadjudicable（検証できなかった場合に refuted を使わない。observed に延期・中止など実施されなかったことを示す語があると refuted は拒否される）。',
     inputSchema: { type: 'object', required: ['prediction_id','status','observed'], properties: {
       prediction_id: { type: 'string' },
       status: { type: 'string', enum: ['confirmed','refuted','unadjudicable'] },
@@ -567,6 +585,16 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
     const preds = await store.listPredictions();
     const p = preds.find((x) => x.id === args.prediction_id);
     if (!p) throw new Error(`${args.prediction_id} が見つかりません。`);
+
+    // ★refuted と unadjudicable の取り違えガード（TASKS.md P2）。
+    //   「そもそも実施・検証されなかった」ケースを refuted で記録すると、
+    //   briefing の的中率（信頼の根拠）が静かに汚染される。曖昧な入力はまず拒否する。
+    if (args.status === 'refuted' && looksUnadjudicable(String(args.observed ?? '')))
+      throw new Error(
+        `拒否: 'observed'（${cut(args.observed, 60)}）の内容は、練習・検証がそもそも実施`
+        + `されなかったことを示しています。この場合は refuted ではなく unadjudicable を使って`
+        + `ください。\n実際に実施した上で予測が外れたことが明確な場合のみ、その経過が分かる`
+        + `observed を書いて refuted としてください。`);
 
     // ── この答え合わせが動かすべき依存先を、サーバー側で算出する ──
     //    「どれを更新すべきか知らなかった」を成立させないため。
