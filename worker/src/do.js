@@ -72,6 +72,18 @@ export class AthleteGraph {
   log(kind, title, detail) {
     this.q(`INSERT INTO log VALUES (?,?,?,?)`, this.today(), kind, title, detail ?? null);
   }
+  // ★短期記憶。新しい順に返す。lint は連投されがちなので直近1件だけ残して畳む。
+  recentLog(limit = 8) {
+    const rows = this.q(`SELECT rowid, ts, kind, title, detail FROM log ORDER BY rowid DESC LIMIT ?`, limit * 3);
+    const out = [];
+    let sawLint = false;
+    for (const r of rows) {
+      if (r.kind === 'lint') { if (sawLint) continue; sawLint = true; }
+      out.push({ ts: r.ts, kind: r.kind, title: r.title, detail: r.detail });
+      if (out.length >= limit) break;
+    }
+    return out;
+  }
   nextId(prefix) {
     const ids = [...this.q(`SELECT id FROM nodes`).map((r) => r.id),
                  ...this.q(`SELECT id FROM predictions`).map((r) => r.id)];

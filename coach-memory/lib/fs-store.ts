@@ -7,7 +7,7 @@ import { TYPE_DIR } from '../../core/tools.ts';
 import type {
   Store, WikiNode, NodeWithEdges, NodeType, TypedNode, Front, Edge, EdgeRel,
   Prediction, SearchHit, OrphanRow, DownstreamRow, Stats, PutOptions, GraphView,
-  DecisionFront, EmbeddedPrediction,
+  DecisionFront, EmbeddedPrediction, LogEntry,
 } from '../../core/types.ts';
 
 interface Page { file: string; rel: string; front: Front; body: string }
@@ -179,6 +179,7 @@ export const fsStore = {
   },
 
   log: (kind: string, title: string, detail?: string | null): void => W.appendLog(kind, title, detail),
+  recentLog: (limit = 8): LogEntry[] => W.recentLog(limit),
 
   stats(): Stats {
     const pages = W.listPages();

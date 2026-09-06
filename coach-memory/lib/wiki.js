@@ -74,6 +74,32 @@ export function appendLog(kind, title, detail) {
   fs.appendFileSync(path.join(ROOT, 'log.md'), line, 'utf8');
 }
 
+const LOG_ENTRY = /^## \[(\d{4}-\d{2}-\d{2})\] (\S+) \| (.+)$/gm;
+
+// ★短期記憶。log.md を新しい順にパースして返す。
+// lint は同じ内容が何度も連続で追記されがちなので、直近1件だけ残して畳む。
+export function recentLog(limit = 8) {
+  const f = path.join(ROOT, 'log.md');
+  if (!fs.existsSync(f)) return [];
+  const text = fs.readFileSync(f, 'utf8');
+  const heads = [...text.matchAll(LOG_ENTRY)];
+  const entries = heads.map((m, i) => {
+    const start = m.index + m[0].length;
+    const end = i + 1 < heads.length ? heads[i + 1].index : text.length;
+    const detail = text.slice(start, end).trim();
+    return { ts: m[1], kind: m[2], title: m[3].trim(), detail: detail || null };
+  }).reverse();
+
+  const out = [];
+  let sawLint = false;
+  for (const e of entries) {
+    if (e.kind === 'lint') { if (sawLint) continue; sawLint = true; }
+    out.push(e);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 const KIND = {
   constraint: '禁則', response_tendency: '反応モデル', decision: '判断',
   analysis: '分析', entity: 'エンティティ', athlete_profile: 'カルテ', question_queue: '質問',

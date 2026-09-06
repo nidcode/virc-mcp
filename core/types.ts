@@ -192,6 +192,11 @@ export interface Stats {
   predictions: Record<string, number> | Array<{ status: string; c: number }>;
 }
 
+/** log.md / DO の log テーブルの1行。短期記憶（直近のやり取り）の元データ。 */
+export interface LogEntry {
+  ts: string; kind: string; title: string; detail?: string | null;
+}
+
 export interface PutOptions { name?: string }
 
 /**
@@ -215,6 +220,8 @@ export interface Store {
   /** 可視化用。ノードとエッジだけの軽い形。 */
   graph(): MaybePromise<GraphView>;
   log(kind: string, title: string, detail?: string | null): MaybePromise<void>;
+  /** ★短期記憶。直近のログを新しい順で返す。get_coach_briefing が読む。 */
+  recentLog(limit?: number): MaybePromise<LogEntry[]>;
   stats(): MaybePromise<Stats>;
   /**
    * ★schema 層（CLAUDE.md）。MCP の resources として接続先の LLM に公開する。

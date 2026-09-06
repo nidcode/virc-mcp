@@ -86,6 +86,8 @@ IDはツールを呼ぶための道具であって、選手には無関係です
 知らずに提案しないこと。
 
 ## 手順
+0. briefing の「直近のやり取り」を踏まえて始める。初対面のように振る舞わない。
+   間が空いていれば自然に触れる（例:「前回から少し間が空きましたね」）
 1. 期限の来た予測があれば、他の話題より先に結果を訊く
 2. 現状を評価する（COROS / Strava。記憶の数値と食い違ったら黙って上書きせず明示する）
 3. **\`get_history\` で経緯を確認する**
@@ -335,6 +337,13 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
       `[BRIEFING ${now}]`,
       '⛔ 以下の記録ID（c_01 / rt_06 など）は道具です。選手への返答に書かないこと。',
     ];
+
+    // ── 短期記憶。前回までに何があったかを、訊かれる前から把握しておく ──
+    const recent = await store.recentLog(6);
+    if (recent.length) {
+      out.push(`直近のやり取り（新しい順・最後は ${recent[0]!.ts}）:`);
+      for (const r of recent) out.push(`  [${r.ts}] ${r.kind} | ${cut(r.title, 60)}`);
+    }
 
     // ── 季節の文脈。直近のデータだけで判断しないための足場 ──
     const goal = (ath[0]?.body ?? '').match(/goal_race[^|]*\|([^|]*)\|/)?.[1] ?? '';
