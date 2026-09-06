@@ -19,14 +19,24 @@
 蓄積されて初めて効いてくる。初回にそれを聞き出す設計が無いと、新規ユーザーは
 何も知らない一般的なコーチと区別がつかない状態からスタートする。
 
-- [ ] briefing が空（athlete_profile 無し）のときに、コーチへ「最初に何を聞くべきか」
+- [x] briefing が空（athlete_profile 無し）のときに、コーチへ「最初に何を聞くべきか」
       （目標レース・現在の練習頻度・故障歴・絶対禁則になりそうな制約）を提示する
       導線を追加する
-- [ ] 初回ヒアリングで集まった内容を `record_memory` / `remember` に落とす、
+- [x] 初回ヒアリングで集まった内容を `record_memory` / `remember` に落とす、
       という手順を PROTOCOL または briefing の空状態メッセージに明記する
 
 **完了条件**: 空のウィキで `get_coach_briefing` を呼んだとき、返り値に
 「何を聞き出すべきか」の具体的な指示が含まれる。
+
+**対応**: `core/tools.ts` の `get_coach_briefing` に、athlete_profile が0件のときだけ
+出す導線を追加（何を聞くか＋ `record_memory` で残す指示、既存の `out.push` パターンに
+揃えた）。加えて、そもそも athlete_profile ページを新規作成する手段が無かったため、
+`record_memory` の対象型に `athlete_profile` を追加し、シングルトンとして id を
+自動採番せず固定 id `athlete` を使うよう `dispatch()` を拡張（既存作成後は拒否し、
+以後は `update_page` に誘導）。`update_page` の「既存必須」という他の型への挙動は
+変更していない。`worker/src/do.js` は無変更（既存の `put`/`get` が既にこの用途に
+必要な upsert / null-return の契約を満たしていたため）。`schema/CLAUDE.md` に
+初回ヒアリングの手順の節を追加した。
 
 ## P1 — IDを選手に見せない、という約束にUI層の抜け道がある
 
