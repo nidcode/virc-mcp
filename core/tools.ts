@@ -485,7 +485,10 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
     await store.putPrediction({ id: pid, owner: did, claim: p.claim,
       criterion: p.adjudication_criterion, review_on: p.review_on, status: 'pending' });
     await store.log('decision', `${did} ${args.question}`, `- ${cut(args.choice, 120)}\n- 予測 \`${pid}\` → ${p.review_on}`);
-    return `記録しました。\n  decision ${did} / prediction ${pid}（${p.review_on} に回収）`;
+    // ★id を返さない（record_decision/record_memory/retract_claim/update_page 共通の方針）。
+    //   ツール呼び出しパネルでID付きの戻り値がそのまま選手に見える経路があるため、
+    //   人間可読な情報（質問文・回収予定日）だけを返す。
+    return `記録しました: 「${args.question}」（${p.review_on} に回収）`;
   },
 
   async file_analysis() {
@@ -559,7 +562,8 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
       body: `# ${a.title}\n\n${a.body}`,
     }, { name: a.type === 'entity' ? a.title : undefined });
     await store.log(a.type, `${id} ${a.title}`, null);
-    return `${a.type} を ${id} として記録しました。`;
+    // ★id を返さない。[[タイトル]] 形式（file_analysis と同じパターン）で参照できるようにする。
+    return `${a.type} を記録しました: 「${a.title}」\n以後 [[${a.title}]] で参照できます。`;
   },
 
   async record_outcome() {
@@ -661,8 +665,9 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
     }
     await store.log('retract', `${a.id} → ${a.corrected_value}`, `- 原因: ${a.reason}\n- 連鎖撤回: ${done}件`);
     const rest = cands.filter((c) => !chain.includes(c.id) && c.status !== 'retracted');
-    return `${a.id} を撤回しました（ページは保持）。連鎖撤回 ${done}件。\n`
-      + (rest.length ? `⚠ 波及の可能性がまだあります: ${rest.map((r) => `${r.id}(${r.via})`).join(' ')}\n`
+    // ★id を返さない。撤回対象・波及候補ともにラベル（人間可読な見出し）で示す。
+    return `「${n.label}」を撤回しました（ページは保持）。連鎖撤回 ${done}件。\n`
+      + (rest.length ? `⚠ 波及の可能性がまだあります: ${rest.map((r) => `「${r.label}」(${r.via})`).join(' ')}\n`
         + `  内容を確認し、必要なら downstream に含めて再実行してください。` : '他に波及先はありません。');
   },
 
@@ -671,7 +676,8 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
     if (!n) throw new Error(`${a.id} が見つかりません。`);
     await store.put({ ...n, front: { ...n.front, ...(a.front ?? {}), updated: now },
       status: a.front?.status ?? n.status, body: a.append ? `${n.body}\n${a.append}\n` : n.body });
-    return `${a.id} を更新しました: ${Object.keys(a.front ?? {}).join(', ') || '本文'}`;
+    // ★id を返さない。対象ページのラベルで示す。
+    return `「${n.label}」を更新しました: ${Object.keys(a.front ?? {}).join(', ') || '本文'}`;
   },
 
   async graph_downstream() {

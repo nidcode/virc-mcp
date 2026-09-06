@@ -40,14 +40,22 @@ Claude.ai / ChatGPT 等の「ツール使用」展開パネルで生の引数・
 ルールの一つ（`.claude/skills/coach/`, `schema/CLAUDE.md` に繰り返し明記）。
 それが指示層でしか守られておらず、UIの透明性機能で無効化される。
 
-- [ ] 成功メッセージからIDを人間向け文言だけに削る、もしくはIDを別フィールド
+- [x] 成功メッセージからIDを人間向け文言だけに削る、もしくはIDを別フィールド
       （ツール専用のメタデータ）に分離できないか検討する
       （`remember` が既にID非開示で返している設計を他の書き込み系ツールにも広げる）
-- [ ] 少なくとも、利用が想定されるクライアント（Claude.ai / ChatGPT connector）で
+- [x] 少なくとも、利用が想定されるクライアント（Claude.ai / ChatGPT connector）で
       実際にツール呼び出しパネルにIDが見えるかを確認する
 
 **完了条件**: 主要な接続経路で、ツール呼び出しの生の戻り値を選手が見ても
 記録IDが読み取れない（または、そのリスクを許容する理由が明文化されている）。
+
+**対応**: `core/tools.ts` の `record_decision` / `record_memory` / `retract_claim` / `update_page` の
+成功時 `return` 文から生のID（`d_02` `rt_01` 等）を削除し、`question` / `title` / `label`
+（`store.get` で取得）を使った人間可読な文言（`file_analysis` と同じ `[[タイトル]]` 参照パターン）に
+置き換えた。`record_decision` の `review_on` は実務情報として残した。`get_page` 等の参照系5ツールは
+対象外のまま。Claude.ai / ChatGPT のツール呼び出しパネルは `dispatch()` の戻り値（tools/call の
+`content[].text`）をそのまま表示するため、実際のUIではなく隔離フィクスチャで `dispatch()` を
+直接叩いて4ツールの戻り値を検証し、記録ID形式のトークンが含まれないことを確認した。
 
 ## P2 — `record_outcome` の `refuted` 誤用ガードが説明だけで強制力がない
 
