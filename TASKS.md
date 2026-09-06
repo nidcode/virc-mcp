@@ -73,10 +73,16 @@ Claude.ai / ChatGPT 等の「ツール使用」展開パネルで生の引数・
 応じて条件付き必須になることは `inputSchema` にも `description` にも事前に書かれて
 おらず、モデルは拒否されて初めて要件を知る。
 
-- [ ] `record_decision` の tool description に「絶対禁則が存在する場合は
+- [x] `record_decision` の tool description に「絶対禁則が存在する場合は
       `constraint_compliance`（20字以上）も必須」と明記する
-- [ ] 可能なら `get_coach_briefing` の返り値に「現在の絶対禁則一覧」がある以上、
+- [x] 可能なら `get_coach_briefing` の返り値に「現在の絶対禁則一覧」がある以上、
       それをそのまま `constraints_reviewed` の期待値として案内する一文を添える
+
+**対応**: `core/tools.ts` の `record_decision` ツール定義（`TOOLS` 配列）を編集。
+トップレベル description に条件付き必須の一文を追加し、`constraint_compliance` の
+description にも「absolute 禁則が1件でも有効に存在する場合は必須」と明記。
+`constraints_reviewed` の description には briefing の「禁則:」欄の `[!]` 付き id を
+そのまま使えばよい旨を追記した（バリデーションロジック自体は変更していない）。
 
 **完了条件**: 絶対禁則がある状態での初回 `record_decision` 呼び出しの成功率が
 実測で上がる（現状: 1回目成功0/1）。

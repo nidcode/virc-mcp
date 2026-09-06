@@ -166,7 +166,8 @@ export const TOOLS: ToolDef[] = [
       context: { type: 'string', description: '現在の話題。該当する保留質問が追加で返る' } } } },
 
   { name: 'record_decision',
-    description: '練習内容・設定・戦略を提案したら必ず呼ぶ。反証条件と absolute 禁則の確認が無いと拒否される。',
+    description: '練習内容・設定・戦略を提案したら必ず呼ぶ。反証条件と absolute 禁則の確認が無いと拒否される。'
+      + 'severity: absolute の禁則が1件でも有効に存在する場合は constraint_compliance も必須になる。',
     inputSchema: { type: 'object', required: ['question','choice','rationale','prediction','constraints_reviewed'], properties: {
       question: { type: 'string' }, choice: { type: 'string' }, rationale: { type: 'string' },
       context: { type: 'object', description: '判断時点の状態スナップショット' },
@@ -179,9 +180,11 @@ export const TOOLS: ToolDef[] = [
         option: { type: 'string' }, reason: { type: 'string' }, deferred_until: { type: 'string' } } } },
       links: { type: 'array', items: { type: 'string' }, description: '関連ページの id やページ名' },
       constraints_reviewed: { type: 'array', items: { type: 'string' },
-        description: '★確認した absolute 禁則の id を全て列挙。漏れると拒否される' },
+        description: '★確認した absolute 禁則の id を全て列挙。漏れると拒否される。'
+          + 'get_coach_briefing の「禁則:」欄で [!] が付いている id をそのまま使えばよい' },
       constraint_compliance: { type: 'string',
-        description: '★各 absolute 禁則に対し、この判断がどう抵触しないかを具体的に述べる。id の列挙だけでは不十分。20文字未満は拒否される' } } } },
+        description: '★absolute 禁則が1件でも有効に存在する場合は必須（無ければ省略可）。'
+          + '各 absolute 禁則に対し、この判断がどう抵触しないかを具体的に述べる。id の列挙だけでは不十分。20文字未満は拒否される' } } } },
 
   { name: 'file_analysis',
     description: '★良い分析・導出・比較をウィキに残す。会話履歴に消えさせない。後から何度も参照する結論はここに置く。',
