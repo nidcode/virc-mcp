@@ -62,6 +62,8 @@ const UNADJUDICABLE_HINTS: Array<string | RegExp> = [
 const looksUnadjudicable = (observed: string): boolean =>
   UNADJUDICABLE_HINTS.some((h) => (typeof h === 'string' ? observed.includes(h) : h.test(observed)));
 
+// ★athlete_profile はここに含めない。record_memory() 内で個別に扱う固定id 'athlete'
+//   のシングルトンであり、nextId による連番採番の対象ではないため。
 const P: Record<string, string> = {
   constraint: 'c', response_tendency: 'rt', decision: 'd', analysis: 'an',
   entity: 'e', conflict: 'cf', note: 'n',
@@ -69,6 +71,7 @@ const P: Record<string, string> = {
 const DIR: Record<string, string> = {
   constraint: 'constraints', response_tendency: 'tendencies', decision: 'decisions',
   analysis: 'analysis', entity: 'entities', conflict: 'conflicts', note: 'notes',
+  athlete_profile: '.',   // 選手カルテはウィキ直下（wiki/athlete.md）に置く唯一のページ
 };
 export const TYPE_DIR = DIR;
 
@@ -230,9 +233,13 @@ export const TOOLS: ToolDef[] = [
       topic: { type: 'string', description: 'テーマ（例: 閾値走、距離走の設定、渡航、故障、レース戦略）' } } } },
 
   { name: 'record_memory',
-    description: '禁則・反応モデル・エンティティ・衝突（選手とコーチの主張が食い違った記録）を新しいページとして記録する。provenance は必須。根拠にした記録がある場合は front.evidence_refs に id を列挙すること（根拠が撤回されたときに波及を検出できる）。',
+    description: '禁則・反応モデル・エンティティ・衝突（選手とコーチの主張が食い違った記録）・選手カルテ（athlete_profile）を新しいページとして記録する。provenance は必須。根拠にした記録がある場合は front.evidence_refs に id を列挙すること（根拠が撤回されたときに波及を検出できる）。'
+      + ' ★athlete_profile はシングルトンで id は必ず athlete。まだ存在しないときの初回作成専用で、'
+      + '既に athlete が存在する場合は拒否される（以後の更新・追記は update_page(id: "athlete") を使うこと）。'
+      + ' body に基準値を書くときは、briefing がそのまま拾えるよう '
+      + '`| goal_race | 値 | \\`provenance\\` | |` 形式の表行にする（goal_race / hr_max_effective / threshold_pace / vo2max）。',
     inputSchema: { type: 'object', required: ['type','title','body','provenance'], properties: {
-      type: { type: 'string', enum: ['constraint','response_tendency','entity','conflict'] },
+      type: { type: 'string', enum: ['constraint','response_tendency','entity','conflict','athlete_profile'] },
       title: { type: 'string' }, body: { type: 'string' },
       provenance: { type: 'string', enum: PROVENANCE },
       front: { type: 'object', description: '型固有の frontmatter（severity, valid_until, confidence, trigger, borne_by 等）' } } } },
@@ -358,6 +365,23 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
       `[BRIEFING ${now}]`,
       '⛔ 以下の記録ID（c_01 / rt_06 など）は道具です。選手への返答に書かないこと。',
     ];
+
+    // ── ★初回体験。athlete_profile が1件も無ければ、まだ誰の記憶も無い。
+    //    「専属コーチとして振る舞え」だけを渡して選手のプロフィールを聞き出す
+    //    導線が無いと、新規ユーザーは一般的なコーチと区別がつかない状態から始まる。
+    if (!ath.length) {
+      out.push(
+        '⚠ 初回セッション（athlete_profile 未登録・選手カルテが空）。',
+        '一般論のコーチングを始める前に、まず次を聞き出すこと:',
+        '  1. 目標レースと目標タイム（種目・日程・目標記録）',
+        '  2. 現在の週あたり練習可能頻度と曜日・時間帯',
+        '  3. 絶対禁則になりうる制約（既往症・持病、生活上動かせない予定）',
+        '  4. 故障歴（過去の怪我・現在の違和感）',
+        '聞き出せた内容は、その場で record_memory（type: "athlete_profile"）で選手カルテとして',
+        '記録すること。athlete_profile はシングルトンで初回作成専用（id は自動的に athlete）。',
+        '一度に全部揃える必要はない。訊けた分から記録し、残りは次回以降のセッションで埋める。',
+      );
+    }
 
     // ── 短期記憶。前回までに何があったかを、訊かれる前から把握しておく ──
     const recent = await store.recentLog(6);
@@ -575,13 +599,19 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
   },
 
   async record_memory() {
-    const id = await store.nextId(P[a.type]);
+    // ★athlete_profile はシングルトン（id は必ず 'athlete'）。他の型のような
+    //   nextId 連番採番ではなく固定idを使い、初回作成専用として既存ページを保護する。
+    const singleton = a.type === 'athlete_profile';
+    if (singleton && await store.get('athlete'))
+      throw new Error('拒否: athlete は既に存在します。選手カルテの更新・追記は '
+        + 'update_page（id: "athlete"）を使ってください。record_memory は初回作成専用です。');
+    const id = singleton ? 'athlete' : await store.nextId(P[a.type]);
     await store.put({
       id, type: a.type, label: a.title, status: 'active',
       front: { id, type: a.type, aliases: [id, a.title], provenance: { source: a.provenance },
         status: 'active', source: 'session', ...(a.front ?? {}) },
       body: `# ${a.title}\n\n${a.body}`,
-    }, { name: a.type === 'entity' ? a.title : undefined });
+    }, { name: singleton ? 'athlete' : (a.type === 'entity' ? a.title : undefined) });
     await store.log(a.type, `${id} ${a.title}`, null);
     // ★id を返さない。[[タイトル]] 形式（file_analysis と同じパターン）で参照できるようにする。
     return `${a.type} を記録しました: 「${a.title}」\n以後 [[${a.title}]] で参照できます。`;
