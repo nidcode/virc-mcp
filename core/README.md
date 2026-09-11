@@ -30,6 +30,8 @@ worker/src/index.js            HTTP MCP   ← doStore
 | `downstream(id, maxDepth)` | `[{id,depth,via,type,label,status,path}]` |
 | `orphans()` | `[{id,type,label}]` |
 | `log(kind,title,detail)` / `stats()` | |
+| `putRaw({date,transcript})` | `{id}`。★`log_session` の生ログ。追記専用・上書き禁止 |
+| `listRaw()` | `[{id,date,transcript,created_at}]`。オフラインの再抽出・監査用。MCPツールとしては公開しない |
 
 `node` の形は `{id, type, label, status, front, body}`。
 `front` が frontmatter 相当で、型固有の属性はすべてここに入ります。
