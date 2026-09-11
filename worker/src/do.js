@@ -22,6 +22,11 @@ CREATE INDEX IF NOT EXISTS idx_pred_due ON predictions(status, review_on);
 CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(id UNINDEXED, label, body, tokenize='trigram');
 CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS log (ts TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, detail TEXT);
+-- ★log_session の生ログ。書き込み専用（コーチングの生存パスからは読まない）。
+--   seed のリセット対象に含めない — ウィキの再投入で選手の生ログを消してはいけない。
+CREATE TABLE IF NOT EXISTS raw_sessions (
+  id TEXT PRIMARY KEY, date TEXT NOT NULL, transcript TEXT NOT NULL, created_at TEXT NOT NULL
+);
 `;
 
 const SKIP_ORPHAN = ['athlete_profile', 'question_queue', 'lint'];
@@ -71,6 +76,15 @@ export class AthleteGraph {
   }
   log(kind, title, detail) {
     this.q(`INSERT INTO log VALUES (?,?,?,?)`, this.today(), kind, title, detail ?? null);
+  }
+  putRaw({ date, transcript }) {
+    const n = this.q(`SELECT COUNT(*) c FROM raw_sessions WHERE date=?`, date)[0].c + 1;
+    const id = `${date}-session-${String(n).padStart(2, '0')}`;
+    this.q(`INSERT INTO raw_sessions VALUES (?,?,?,?)`, id, date, transcript, new Date().toISOString());
+    return { id };
+  }
+  listRaw() {
+    return this.q(`SELECT id, date, transcript, created_at FROM raw_sessions ORDER BY id`);
   }
   // ★短期記憶。新しい順に返す。lint は連投されがちなので直近1件だけ残して畳む。
   recentLog(limit = 8) {

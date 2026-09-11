@@ -7,7 +7,7 @@ import { TYPE_DIR } from '../../core/tools.ts';
 import type {
   Store, WikiNode, NodeWithEdges, NodeType, TypedNode, Front, Edge, EdgeRel,
   Prediction, SearchHit, OrphanRow, DownstreamRow, Stats, PutOptions, GraphView,
-  DecisionFront, EmbeddedPrediction, LogEntry,
+  DecisionFront, EmbeddedPrediction, LogEntry, RawEntry,
 } from '../../core/types.ts';
 
 interface Page { file: string; rel: string; front: Front; body: string }
@@ -189,4 +189,28 @@ export const fsStore = {
   },
 
   reindex: (): number => W.rebuildIndex(),
+
+  // --- 生ログ（raw/）------------------------------------------------------
+  // ★書き込み専用。上書きしない。wiki（W.WIKI）とは別の raw/ 直下に置く。
+  putRaw({ date, transcript }: { date: string; transcript: string }): { id: string } {
+    const dir = path.join(W.ROOT, 'raw');
+    fs.mkdirSync(dir, { recursive: true });
+    let n = 1;
+    while (fs.existsSync(path.join(dir, `${date}-session-${String(n).padStart(2, '0')}.md`))) n++;
+    const id = `${date}-session-${String(n).padStart(2, '0')}`;
+    fs.writeFileSync(path.join(dir, `${id}.md`), transcript.endsWith('\n') ? transcript : transcript + '\n', 'utf8');
+    return { id };
+  },
+  listRaw(): RawEntry[] {
+    const dir = path.join(W.ROOT, 'raw');
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir)
+      .filter((f) => /^\d{4}-\d{2}-\d{2}-session-\d+\.md$/.test(f))
+      .sort()
+      .map((f) => {
+        const id = f.replace(/\.md$/, '');
+        return { id, date: id.slice(0, 10), transcript: fs.readFileSync(path.join(dir, f), 'utf8'),
+          created_at: fs.statSync(path.join(dir, f)).birthtime.toISOString() };
+      });
+  },
 } satisfies Store;   // ★契約を型で強制する

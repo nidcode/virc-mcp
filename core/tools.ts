@@ -101,6 +101,12 @@ IDはツールを呼ぶための道具であって、選手には無関係です
 
 **指示されてから記録するのでは遅い。** 選手は記録を頼む役ではありません。
 
+## 話題の切れ目・会話の終わりに log_session を呼ぶ
+そのセッションのやり取りを、要約せずできるだけ生のまま \`log_session\` に渡してください。
+選手の発言は原文のまま、コーチ側は要約でよい。今の型に当てはまらない言い回しや脱線も削らない
+——それが後でオントロジーを見直すときに拾える唯一の記録です。\`<athlete>\`/\`<coach>\`/
+\`<tool_result>\` で話者を分離すること。書き込み専用で、この会話中に読み返されることはありません。
+
 ## 処方する前に、過去を見る
 \`get_history\` で、そのテーマについて過去に何を決め、何が起きたかを確認してください。
 **直近のデータだけで判断しない。** 同じことを前に試していないか、そのとき何が起きたかを
@@ -225,6 +231,17 @@ export const TOOLS: ToolDef[] = [
       kind: { type: 'string', enum: ['observation','preference','constraint_hint','context'],
         description: 'observation=体や練習の反応 / preference=好み・やりやすさ / constraint_hint=制約になりそうなこと / context=生活・仕事・環境' },
       why: { type: 'string', description: 'なぜ残す価値があるか（任意）' } } } },
+
+  { name: 'log_session',
+    description: '★話題が大きく変わる・会話を切り上げる直前に呼ぶ。そのセッションのやり取りを、'
+      + '要約・取捨選択せずできるだけ生のまま残す。選手の発言は原文のまま引用し、コーチ側の発言は要約でよい。'
+      + '今のオントロジーの型（禁則・反応モデル・判断…）に当てはまらない言い回し・ためらい・脱線も削らないこと。'
+      + 'それが後で拾える唯一の記録になる。書き込み専用 — この会話中に読み返されることはない。'
+      + '各発言を `<athlete>` / `<coach>` / `<tool_result>` タグで話者分離すること（将来の再抽出プロンプトの入力形式）。',
+    inputSchema: { type: 'object', required: ['transcript'], properties: {
+      transcript: { type: 'string', description: '`<athlete>選手の発言（原文のまま）</athlete>` '
+        + '`<coach>コーチの発言（要約可）</coach>` `<tool_result>ツール結果の要旨</tool_result>` の'
+        + '繰り返しで、そのセッションのやり取りを時系列に並べたもの' } } } },
 
   { name: 'get_history',
     description: '★処方する前に呼ぶ。あるテーマについて過去に何を決め、何を予測し、実際どうなったかを時系列で返す。'
@@ -561,6 +578,14 @@ export async function dispatch(store: Store, name: string, a: Args = {}): Promis
     }, { name: `${id}-${W_SLUG(a.what)}` });
     await store.log('note', cut(a.what, 60), a.why ?? null);
     return `覚えました。`;   // ★id を返さない。返すとそのまま選手に伝えられてしまう
+  },
+
+  async log_session() {
+    const transcript = String(a.transcript ?? '').trim();
+    if (!transcript) throw new Error('拒否: transcript が空です。');
+    await store.putRaw({ date: now, transcript });
+    // ★log() には書かない。recentLog（briefingの「直近のやり取り」）を生ダンプで埋めないため。
+    return `セッションの記録を残しました。`;
   },
 
   async get_history() {
