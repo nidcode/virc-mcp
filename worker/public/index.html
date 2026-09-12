@@ -41,13 +41,18 @@ button{font:inherit;cursor:pointer;border:0;border-radius:8px}
 .copy.done{background:#22c55e}
 
 /* タブ */
+.pick{font-size:14px;margin:0 0 12px}
+.pick b{color:var(--fg)}
 .tabs{display:flex;gap:6px;margin:0 0 18px;flex-wrap:wrap}
+.rec{font-size:10.5px;font-weight:600;color:var(--accent);margin-left:7px}
 .tab{background:var(--panel);color:var(--dim);border:1px solid var(--line);
   padding:8px 18px;font-size:14px}
 .tab[aria-selected="true"]{background:#26262b;color:var(--fg);border-color:#3c3c42}
 ol{color:var(--dim);padding-left:22px;margin:0;font-size:14px}
 ol li{margin:.5em 0}
 .note{font-size:12.5px;color:var(--faint);margin-top:16px}
+.warn{font-size:13px;color:var(--dim);background:var(--panel);border-left:2px solid var(--accent);
+  border-radius:0 6px 6px 0;padding:10px 14px;margin:0 0 16px}
 
 /* データのこと */
 .data{margin:0;padding:0;list-style:none}
@@ -70,7 +75,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
 
   <section>
     <h1>あなたを憶えている<br>ランニングコーチです。</h1>
-    <p class="lead">アプリではありません。いつも使っているAI（Claude・ChatGPT・Gemini）に繋いで使います。</p>
+    <p class="lead">アプリではありません。いつも使っているAI（Claude・ChatGPT）に繋いで使います。</p>
     <a class="btn" href="#connect">接続する</a>
   </section>
 
@@ -90,7 +95,10 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
         <p>暑さに弱い、朝は動かない。走った結果から理解していきます。</p></li>
       <li><b>いつも、同じ基準で話す</b>
         <p>実測と推論を区別し、強い根拠を優先します。</p></li>
+      <li><b>記録は、あなただけのもの</b>
+        <p>あなた専用の領域に保存され、他の人のデータと混ざりません。</p></li>
     </ul>
+    <p class="note">Garmin や Strava が記録するのは、走った結果。VIRC が憶えるのは、何をなぜ決めたか。</p>
   </section>
 
   <section id="connect">
@@ -101,24 +109,18 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
       <button class="copy" id="copy">コピー</button>
     </div>
 
+    <p class="pick">日本からは <b>Claude</b> が最短です。無料プランでも追加できます。</p>
+
     <div class="tabs" role="tablist">
-      <button class="tab" role="tab" aria-selected="true"  data-t="claude">Claude</button>
+      <button class="tab" role="tab" aria-selected="true"  data-t="claude">Claude<span class="rec">おすすめ</span></button>
       <button class="tab" role="tab" aria-selected="false" data-t="chatgpt">ChatGPT</button>
       <button class="tab" role="tab" aria-selected="false" data-t="gemini">Gemini</button>
     </div>
 
+    <p class="warn" id="plead" hidden></p>
     <ol id="steps"></ol>
-    <p class="note">メニューの名称はアプリの版によって少し違うことがあります。「コネクタ」「Connectors」「MCP」のいずれかの項目を探してください。</p>
-  </section>
-
-  <section>
-    <h2>データのこと</h2>
-    <ul class="data">
-      <li>Googleから受け取るのは、メールアドレスと表示名だけ。</li>
-      <li>記録はあなた専用の領域に保存されます。</li>
-      <li>接続は<a href="/connections">いつでも解除</a>できます。</li>
-    </ul>
-    <p class="note">Garmin や Strava が記録するのは、走った結果。VIRC が憶えるのは、何をなぜ決めたか。</p>
+    <p class="note" id="pnote"></p>
+    <p class="note">Googleは本人確認に使うだけです（受け取るのはメールアドレスと表示名のみ）。接続は<a href="/connections">いつでも解除</a>できます。</p>
   </section>
 
   <section>
@@ -136,21 +138,37 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
 
 <script>
 const STEPS = {
-  claude: ['設定 → コネクタ を開く',
-    'カスタムコネクタを追加 を選ぶ',
-    '上のURLを貼って追加する',
-    '「Googleでログイン」を押す。以上です'],
-  chatgpt: ['設定 → コネクタ を開く',
-    '新しいコネクタを追加 を選ぶ',
-    '上のURLを貼って追加する',
-    '「Googleでログイン」を押す。以上です'],
-  gemini: ['設定からコネクタ（MCP）の項目を開く',
-    '新しい接続を追加 を選ぶ',
-    '上のURLを貼って追加する',
-    '「Googleでログイン」を押す。以上です'],
+  claude: {
+    steps: ['「カスタマイズ」→「コネクタ」を開く',
+      '「+」→「カスタムコネクタを追加」を選ぶ',
+      '上のURLを貼って追加する',
+      '「Googleでログイン」を押す。以上です'],
+    note: '無料プランでも使えます。Team・Enterprise では、管理者が先に組織の設定から追加する必要があります。',
+  },
+  chatgpt: {
+    steps: ['設定 →「セキュリティとログイン」で「開発者モード」をオンにする',
+      '<a href="https://chatgpt.com/plugins">chatgpt.com/plugins</a> を開いて「+」を押す',
+      '名前と説明を入れ、接続先に上のURLを貼る',
+      '「Googleでログイン」を押す。以上です'],
+    note: 'Plus・Pro・Business などの有料プランのウェブ版のみ。開発者モードを先に有効にしないと、追加する画面にたどり着けません。',
+  },
+  gemini: {
+    lead: '現在、日本からは追加できません。Google側の提供条件が「米国在住」に限られているためです。以下は条件を満たす場合の手順です。',
+    steps: ['「設定とヘルプ」→「接続済みのアプリ」を開く',
+      '「Spark 用のカスタムアプリ」から「カスタムアプリを追加」を選ぶ',
+      '上のURLを貼って「次へ」',
+      '「Googleでログイン」を押す。以上です'],
+    note: '条件は、18歳以上・米国在住・個人のGoogleアカウント・Gemini Spark の利用権の4つすべて。追加はウェブ版のみです。',
+  },
 };
-const steps = document.getElementById('steps');
-const show = k => steps.innerHTML = STEPS[k].map(s => `<li>${s}</li>`).join('');
+const steps = document.getElementById('steps'), pnote = document.getElementById('pnote'),
+      plead = document.getElementById('plead');
+const show = k => {
+  steps.innerHTML = STEPS[k].steps.map(s => `<li>${s}</li>`).join('');
+  pnote.textContent = STEPS[k].note;
+  plead.textContent = STEPS[k].lead ?? '';
+  plead.hidden = !STEPS[k].lead;
+};
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(o => o.setAttribute('aria-selected', o === t));
   show(t.dataset.t);
