@@ -1,284 +1,167 @@
 <!doctype html><html lang="ja"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>コーチの頭の中</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIRC — あなたを憶えているランニングコーチ</title>
+<meta name="description" content="アプリではありません。いつも使っているAI（Claude・ChatGPT・Gemini）に繋いで使う、あなたを憶えているランニングコーチです。">
 <style>
-:root{--bg:#0f1115;--fg:#e6e6e6;--dim:#8b8f98;--line:#2a2f3a;--panel:#151821}
-*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
-font:13px/1.6 -apple-system,"Hiragino Sans",sans-serif;overflow:hidden}
-#c{position:fixed;left:0;top:0;display:block}   /* 表示サイズは JS で CSS px に固定する */
-.panel{position:fixed;background:#151821e0;border:1px solid var(--line);border-radius:10px;
-backdrop-filter:blur(8px)}
-#legend{left:14px;top:14px;padding:12px 14px;max-width:250px}
-#legend b{display:block;font-size:12px;margin:0 0 7px}
-#legend hr{border:0;border-top:1px solid var(--line);margin:11px 0 9px}
-.k{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:11.5px;padding:1px 0}
-.d{width:9px;height:9px;border-radius:50%;flex:none}
-.rel{display:flex;align-items:center;gap:7px;font-size:11.5px;padding:2px 0;cursor:pointer;color:var(--dim)}
-.rel input{margin:0;accent-color:#5b8dee;cursor:pointer}
-.rel svg{flex:none}
-.rel.off{opacity:.38}
-.rel span.n{margin-left:auto;font-variant-numeric:tabular-nums;opacity:.65}
-#stat{left:14px;bottom:14px;padding:7px 12px;color:var(--dim);font-size:11.5px}
-#hint{right:400px;bottom:14px;padding:7px 12px;color:var(--dim);font-size:11.5px}
-#side{right:0;top:0;bottom:0;width:380px;background:var(--panel);border:0;border-left:1px solid var(--line);
-border-radius:0;padding:18px 20px;overflow:auto;transform:translateX(100%);transition:.18s}
-#side.on{transform:none}
-#side h2{font-size:15px;margin:.1em 0 .5em;line-height:1.4}
-#side .meta{color:var(--dim);font-size:11.5px;margin-bottom:12px}
-#side .edge{display:flex;gap:8px;align-items:baseline;font-size:12px;padding:3px 0;border-top:1px solid #20242e}
-#side .edge b{font-weight:600;font-size:11px;padding:1px 6px;border-radius:4px;flex:none}
-#tip{position:fixed;pointer-events:none;max-width:330px;padding:9px 12px;z-index:9;
-display:none;box-shadow:0 6px 24px #0008}
-#tip .ttl{font-size:12.5px;line-height:1.45;margin:3px 0 5px}
-#tip .row{color:var(--dim);font-size:11px;display:flex;gap:6px}
-#tip .row b{color:#aeb4bf;font-weight:500;min-width:52px}
-.badge{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:4px;font-weight:600}
-#props{margin:6px 0 0}
-#props .p{display:flex;gap:10px;font-size:12px;padding:4px 0;border-top:1px solid #20242e}
-#props .p b{color:var(--dim);font-weight:500;min-width:74px;flex:none;font-size:11.5px}
-#props .p span{white-space:pre-wrap}
-#side pre{white-space:pre-wrap;font:12px/1.75 ui-monospace,monospace;color:#c8ccd4;
-margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+/* 黒 × オレンジ。地は青みを抜いた中性の黒にする（青が残るとオレンジと喧嘩する） */
+:root{--bg:#0d0d0f;--fg:#ededee;--dim:#a6a6aa;--faint:#8a8a8f;--line:#2a2a2e;
+  --panel:#17171a;--accent:#f97316;--link:#fb923c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.85 -apple-system,"Hiragino Sans",sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:720px;margin:0 auto;padding:0 20px}
+section{padding-block:56px;border-top:1px solid var(--line)}
+section:first-of-type{border-top:0}
+h1{font-size:28px;line-height:1.5;margin:0 0 18px;letter-spacing:-.01em}
+h2{font-size:17px;margin:0 0 22px;letter-spacing:.01em}
+p{color:var(--dim);margin:.7em 0}
+.lead{font-size:16px;color:var(--dim)}
+.mark{font-size:14px;font-weight:700;letter-spacing:.14em;padding:22px 0 0;display:block}
+.mark span{color:var(--link)}
+.mark em{display:block;font:400 11px/1.6 -apple-system,sans-serif;
+  letter-spacing:.06em;color:var(--faint);margin-top:3px}
+
+/* 3つの特徴 */
+.feat{margin:26px 0 0;padding:0;list-style:none}
+.feat li{padding:18px 0;border-top:1px solid var(--line)}
+.feat li p{margin:0;font-size:14px}
+.feat b{display:block;font-size:15px;color:var(--fg);margin-bottom:5px}
+
+/* エンドポイント */
+.url{display:flex;gap:10px;align-items:center;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:6px 0 26px;
+  flex-wrap:wrap}
+.url code{font:13px/1.6 ui-monospace,monospace;color:#c9c9cd;flex:1;min-width:200px;
+  word-break:break-all}
+button{font:inherit;cursor:pointer;border:0;border-radius:8px}
+/* オレンジ地には白より黒の方が読める（白だとコントラスト比が 3 を切る） */
+.copy{background:var(--accent);color:#0d0d0f;font-weight:600;padding:8px 16px;
+  font-size:13px;flex:none}
+.copy.done{background:#22c55e}
+
+/* タブ */
+.tabs{display:flex;gap:6px;margin:0 0 18px;flex-wrap:wrap}
+.tab{background:var(--panel);color:var(--dim);border:1px solid var(--line);
+  padding:8px 18px;font-size:14px}
+.tab[aria-selected="true"]{background:#26262b;color:var(--fg);border-color:#3c3c42}
+ol{color:var(--dim);padding-left:22px;margin:0;font-size:14px}
+ol li{margin:.5em 0}
+.note{font-size:12.5px;color:var(--faint);margin-top:16px}
+
+/* データのこと */
+.data{margin:0;padding:0;list-style:none}
+.data li{font-size:14px;color:var(--dim);padding:7px 0 7px 20px;position:relative}
+.data li::before{content:"";position:absolute;left:0;top:14px;width:6px;height:6px;
+  border-radius:50%;background:#3c3c42}
+
+a{color:var(--link);text-decoration:none}
+a:hover{text-decoration:underline}
+.btn{display:inline-block;background:var(--accent);color:#0d0d0f;font-weight:600;
+  padding:11px 24px;border-radius:8px;font-size:14px;margin-top:20px}
+.btn:hover{text-decoration:none;opacity:.92}
+footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
+  color:var(--faint);display:flex;gap:18px;flex-wrap:wrap}
+@media(max-width:520px){h1{font-size:23px}section{padding-block:42px}}
 </style></head><body>
-<canvas id="c"></canvas>
-<div id="legend" class="panel"><b>コーチの頭の中</b><div id="keys"></div>
-  <hr><b>関係</b><div id="rels"></div></div>
-<div id="stat" class="panel">読み込み中…</div>
-<div id="hint" class="panel">ノードをクリックで詳細 · ホイールで拡大 · f キーで再配置</div>
-<div id="tip" class="panel"></div>
-<div id="side" class="panel"><h2 id="t"></h2><div class="meta" id="m"></div>
-  <div id="props"></div>
-  <div id="e"></div><pre id="b"></pre></div>
+<div class="wrap">
+
+  <span class="mark">VIR<span>C</span><em>Virtual Intelligent Running Coach</em></span>
+
+  <section>
+    <h1>あなたを憶えている<br>ランニングコーチです。</h1>
+    <p class="lead">アプリではありません。いつも使っているAI（Claude・ChatGPT・Gemini）に繋いで使います。</p>
+    <a class="btn" href="#connect">接続する</a>
+  </section>
+
+  <section>
+    <h2>ちょっとしたことを、気軽に。</h2>
+    <ul class="data">
+      <li>「今日は疲れてる。ジョグに変えていい？」</li>
+      <li>「膝が少し痛い。休むべき？」</li>
+      <li>「来週レース。今週はどう走る？」</li>
+    </ul>
+    <p>あなたの前提を知っているので、毎回の説明は要りません。</p>
+
+    <ul class="feat">
+      <li><b>二度目から、説明が要らない</b>
+        <p>走れない曜日も、古い故障も、憶えています。</p></li>
+      <li><b>使うほど、あなたに合っていく</b>
+        <p>暑さに弱い、朝は動かない。走った結果から理解していきます。</p></li>
+      <li><b>いつも、同じ基準で話す</b>
+        <p>実測と推論を区別し、強い根拠を優先します。</p></li>
+    </ul>
+  </section>
+
+  <section id="connect">
+    <h2>接続する</h2>
+    <p>このURLを、お使いのAIのコネクタ設定に貼るだけです。</p>
+    <div class="url">
+      <code id="ep">https://connect.virc.run/mcp</code>
+      <button class="copy" id="copy">コピー</button>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true"  data-t="claude">Claude</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="chatgpt">ChatGPT</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="gemini">Gemini</button>
+    </div>
+
+    <ol id="steps"></ol>
+    <p class="note">メニューの名称はアプリの版によって少し違うことがあります。「コネクタ」「Connectors」「MCP」のいずれかの項目を探してください。</p>
+  </section>
+
+  <section>
+    <h2>データのこと</h2>
+    <ul class="data">
+      <li>Googleから受け取るのは、メールアドレスと表示名だけ。</li>
+      <li>記録はあなた専用の領域に保存されます。</li>
+      <li>接続は<a href="/connections">いつでも解除</a>できます。</li>
+    </ul>
+    <p class="note">Garmin や Strava が記録するのは、走った結果。VIRC が憶えるのは、何をなぜ決めたか。</p>
+  </section>
+
+  <section>
+    <h2>最初の一歩</h2>
+    <p>接続したら「コーチして」と話しかけるだけ。はじめは質問が多めです。答えるほど、提案が具体的になります。</p>
+    <a class="btn" href="#connect">接続する</a>
+  </section>
+
+  <footer>
+    <a href="/login">ログイン</a>
+    <a href="/connections">接続中のアプリ</a>
+    <a href="/graph">コーチの頭の中</a>
+  </footer>
+</div>
+
 <script>
-const NODE = {decision:'#5b8dee', response_tendency:'#22c55e', constraint:'#ef4444',
-  entity:'#eab308', analysis:'#a855f7', athlete_profile:'#f97316',
-  question_queue:'#14b8a6', lint:'#64748b', plan:'#38bdf8'};
-const NNAME = {decision:'判断', response_tendency:'反応モデル', constraint:'禁則', entity:'エンティティ',
-  analysis:'分析', athlete_profile:'カルテ', question_queue:'質問', lint:'lint', plan:'プラン'};
-
-// 関係の定義。structural=false のものは既定で隠す（本文リンクは量が多く構造を覆い隠すため）
-const REL = {
-  applies:      {label:'根拠にした',   from:'判断', to:'反応モデル', color:'#22c55e', w:2.0, dash:[],      on:true},
-  reviewed:     {label:'確認した',     from:'判断', to:'禁則',       color:'#ef4444', w:1.6, dash:[],      on:true},
-  contaminated: {label:'誤りが波及',   from:'判断', to:'判断',       color:'#f97316', w:2.4, dash:[6,3],   on:true},
-  supersedes:   {label:'置き換えた',   from:'分析', to:'判断',       color:'#a855f7', w:2.0, dash:[2,3],   on:true},
-  mentions:     {label:'本文で言及',   from:'任意', to:'任意',       color:'#39414f', w:0.7, dash:[],      on:false},
+const STEPS = {
+  claude: ['設定 → コネクタ を開く',
+    'カスタムコネクタを追加 を選ぶ',
+    '上のURLを貼って追加する',
+    '「Googleでログイン」を押す。以上です'],
+  chatgpt: ['設定 → コネクタ を開く',
+    '新しいコネクタを追加 を選ぶ',
+    '上のURLを貼って追加する',
+    '「Googleでログイン」を押す。以上です'],
+  gemini: ['設定からコネクタ（MCP）の項目を開く',
+    '新しい接続を追加 を選ぶ',
+    '上のURLを貼って追加する',
+    '「Googleでログイン」を押す。以上です'],
 };
+const steps = document.getElementById('steps');
+const show = k => steps.innerHTML = STEPS[k].map(s => `<li>${s}</li>`).join('');
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(o => o.setAttribute('aria-selected', o === t));
+  show(t.dataset.t);
+});
+show('claude');
 
-// frontmatter の表示名。ここに無いキーは出さない（aliases/source/id などのノイズを落とす）
-const FKEY = {severity:'重大度', modality:'様相', valid_until:'有効期限', on_expiry:'失効時',
-  confidence:'確信度', borne_by:'担い手', scope:'適用範囲', date:'日付', updated:'更新',
-  question:'問い', answer:'答え', resolved_on:'確定日', needs_confirmation:'要確認',
-  needs_operationalization:'述語化が必要', corrected:'訂正後', realizes:'実現するもの',
-  implication:'運用上の含意', note:'注記'};
-const SEV = {absolute:'絶対禁則', strong:'強い制約', soft:'弱い制約'};
-const PROV = {primary_measured:'一次実測', external_primary:'外部一次情報', athlete_report:'本人の申告',
-  athlete_estimate:'本人の経験則', proxy_derived:'代理データ換算', coach_inference:'コーチの推論'};
-const val = v => v==null ? '' : typeof v==='object' ? JSON.stringify(v).replace(/[{}"]/g,'').replace(/,/g,', ') : String(v);
-
-function props(front){
-  const out=[];
-  const add=(k,v)=>{ if(v!==''&&v!=null) out.push(`<div class="p"><b>${k}</b><span>${v}</span></div>`); };
-  if(front.severity) add('重大度', SEV[front.severity]??front.severity);
-  if(front.provenance?.source) add('出所', PROV[front.provenance.source]??front.provenance.source);
-  if(front.confidence!=null) add('確信度', front.confidence);
-  if(front.borne_by) add('担い手', front.borne_by);
-  if(front.trigger) add('発火条件', front.trigger.predicate
-    ?? (front.trigger.draft? front.trigger.draft+'（未述語化）':''));
-  if(front.valid_until) add('有効期限', front.valid_until + (front.on_expiry? ' → '+front.on_expiry:''));
-  if(front.refutation) add('撤回理由', front.refutation.reason);
-  if(front.corrected) add('訂正後', front.corrected);
-  const pr = front.prediction ?? (front.predictions??[])[0];
-  if(pr) add('予測', `${pr.claim}\n反証条件: ${pr.adjudication_criterion}\n${pr.review_on} · ${pr.status}`
-    + (front.predictions?.length>1? `\n（他 ${front.predictions.length-1} 件）`:''));
-  for(const [k,n] of Object.entries(FKEY))
-    if(!['severity','valid_until','on_expiry','confidence','borne_by','corrected'].includes(k)
-       && front[k]!=null && front[k]!==false && !out.some(o=>o.includes(`>${n}<`))) add(n, val(front[k]));
-  return out.join('');
-}
-
-const cv=document.getElementById('c'), x=cv.getContext('2d');
-let N=[], E=[], sel=null, hov=null, cam={x:0,y:0,z:1}, alpha=1, userMoved=false, drag=false;
-const fitc=()=>{
-  const d=devicePixelRatio||1;
-  cv.width=innerWidth*d; cv.height=innerHeight*d;      // バッキングストアは物理px
-  cv.style.width=innerWidth+'px'; cv.style.height=innerHeight+'px';  // 表示はCSS px（置換要素なので必須）
-  x.setTransform(d,0,0,d,0,0);
-};
-addEventListener('resize',()=>{fitc(); if(!userMoved) fitView(); draw();}); fitc();
-const shown = e => REL[e.rel].on;
-
-(async () => {
-  const res = await fetch('/api/graph');
-  if (res.status === 401) { location.href = '/login'; return; }
-  // 401 以外で /login に送ると、戻ってきて同じ失敗を踏む無限往復になる
-  if (!res.ok) { document.getElementById('stat').textContent = `読み込みに失敗しました（${res.status}）`; return; }
-  const g = await res.json();
-  const deg={}; for(const e of g.edges){deg[e.source]=(deg[e.source]||0)+1;deg[e.target]=(deg[e.target]||0)+1}
-  N = g.nodes.map((n,i)=>({...n, deg:deg[n.id]||0,
-    x:Math.cos(i/g.nodes.length*6.283)*240+(Math.random()-.5)*30,
-    y:Math.sin(i/g.nodes.length*6.283)*240+(Math.random()-.5)*30, vx:0, vy:0}));
-  const ix=Object.fromEntries(N.map(n=>[n.id,n]));
-  E = g.edges.map(e=>({s:ix[e.source], t:ix[e.target], rel:e.rel})).filter(e=>e.s&&e.t&&REL[e.rel]);
-
-  document.getElementById('keys').innerHTML = [...new Set(N.map(n=>n.type))].map(t=>
-    `<div class="k"><span class="d" style="background:${NODE[t]||'#888'}"></span>${NNAME[t]||t}</div>`).join('');
-  const count = r => E.filter(e=>e.rel===r).length;
-  document.getElementById('rels').innerHTML = Object.entries(REL).map(([r,d])=>
-    `<label class="rel${d.on?'':' off'}" data-r="${r}" title="${d.from} → ${d.to}">
-       <input type="checkbox" ${d.on?'checked':''}>
-       <svg width="22" height="8"><line x1="0" y1="4" x2="17" y2="4" stroke="${d.color}"
-         stroke-width="${Math.max(1.4,d.w)}" ${d.dash.length?`stroke-dasharray="${d.dash}"`:''}/>
-         <polygon points="17,1 22,4 17,7" fill="${d.color}"/></svg>
-       ${d.label}<span class="n">${count(r)}</span></label>`).join('');
-  document.querySelectorAll('.rel').forEach(el => el.onclick = () => {
-    const r=el.dataset.r; setTimeout(()=>{ REL[r].on = el.querySelector('input').checked;
-      el.classList.toggle('off', !REL[r].on); alpha=.5; userMoved=false; },0);
-  });
-  document.getElementById('stat').textContent =
-    `${N.length} ノード / 構造 ${E.filter(e=>e.rel!=='mentions').length} 本 · 言及 ${count('mentions')} 本`;
-
-  for(let i=0;i<500;i++) step();
-  fitView(); loop();
-})();
-
-// 力学レイアウト。構造エッジは短く強く、言及は長く弱く引く。
-const REP=2400, CAP=2.5, KC=.012, DAMP=.84;
-const LEN = r => r==='mentions'?140:72, KS = r => r==='mentions'?.018:.09;
-function step(){
-  if(alpha<.004) return;
-  for(const a of N){
-    for(const b of N){ if(a===b) continue;
-      let dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy);
-      if(d<1){dx=Math.random()-.5;dy=Math.random()-.5;d=1}
-      const f=Math.min(REP/(d*d),CAP);
-      a.vx+=dx/d*f*alpha; a.vy+=dy/d*f*alpha;
-    }
-  }
-  for(const e of E){
-    if(!shown(e)) continue;
-    const dx=e.t.x-e.s.x,dy=e.t.y-e.s.y,d=Math.hypot(dx,dy)||1,f=(d-LEN(e.rel))*KS(e.rel)*alpha;
-    e.s.vx+=dx/d*f; e.s.vy+=dy/d*f; e.t.vx-=dx/d*f; e.t.vy-=dy/d*f;
-  }
-  for(const a of N){ a.vx-=a.x*KC*alpha; a.vy-=a.y*KC*alpha;
-    a.vx*=DAMP; a.vy*=DAMP; a.x+=a.vx; a.y+=a.vy; }
-  alpha*=.992;
-  if(!userMoved) fitView();
-}
-function fitView(){
-  if(!N.length) return;
-  const xs=N.map(n=>n.x), ys=N.map(n=>n.y);
-  const w=Math.max(...xs)-Math.min(...xs), h=Math.max(...ys)-Math.min(...ys);
-  const cx=(Math.max(...xs)+Math.min(...xs))/2, cy=(Math.max(...ys)+Math.min(...ys))/2;
-  cam.z=Math.min(1.7,Math.max(.25,Math.min((innerWidth-560)/(w+300),(innerHeight-130)/(h+180))));
-  cam.x=-cx*cam.z-190; cam.y=-cy*cam.z;
-}
-const R = n => 4+Math.min(9,n.deg*1.05)+(n===sel?3:0);
-const near = n => sel && E.some(e=>shown(e)&&((e.s===sel&&e.t===n)||(e.t===sel&&e.s===n)));
-
-function arrow(sx,sy,tx,ty,rt,col){                     // 終端に矢じり
-  const a=Math.atan2(ty-sy,tx-sx), ex=tx-Math.cos(a)*(rt+2.5), ey=ty-Math.sin(a)*(rt+2.5), L=6.5;
-  x.fillStyle=col; x.beginPath(); x.moveTo(ex,ey);
-  x.lineTo(ex-Math.cos(a-.4)*L, ey-Math.sin(a-.4)*L);
-  x.lineTo(ex-Math.cos(a+.4)*L, ey-Math.sin(a+.4)*L);
-  x.closePath(); x.fill();
-}
-function draw(){
-  x.clearRect(0,0,innerWidth,innerHeight);
-  x.save(); x.translate(innerWidth/2+cam.x, innerHeight/2+cam.y); x.scale(cam.z,cam.z);
-  const boxes=[];
-  for(const e of E){
-    if(!shown(e)) continue;
-    const d=REL[e.rel], on=sel&&(e.s===sel||e.t===sel), dim=sel&&!on;
-    x.globalAlpha = dim?.12:(on?1:.72);
-    x.strokeStyle=d.color; x.lineWidth=on?d.w+.9:d.w; x.setLineDash(d.dash);
-    x.beginPath(); x.moveTo(e.s.x,e.s.y); x.lineTo(e.t.x,e.t.y); x.stroke(); x.setLineDash([]);
-    if(e.rel!=='mentions'||on) arrow(e.s.x,e.s.y,e.t.x,e.t.y,R(e.t),d.color);
-    if(on){                                              // 選択時だけ関係名を出す
-      const mx=(e.s.x+e.t.x)/2, my=(e.s.y+e.t.y)/2;
-      x.font='10px sans-serif'; const w=x.measureText(d.label).width;
-      x.globalAlpha=.92; x.fillStyle='#0f1115'; x.fillRect(mx-w/2-4,my-8,w+8,14);
-      x.fillStyle=d.color; x.fillText(d.label, mx-w/2, my+2.5);
-    }
-  }
-  x.globalAlpha=1;
-  for(const n of N){
-    const r=R(n), dim=sel&&n!==sel&&!near(n);
-    x.globalAlpha=dim?.2:1;
-    x.beginPath(); x.arc(n.x,n.y,r,0,6.284); x.fillStyle=NODE[n.type]||'#888'; x.fill();
-    if(n.severity==='absolute'){x.strokeStyle='#fff';x.lineWidth=1.5;x.stroke()}
-    if(n.status==='retracted'){x.strokeStyle='#ff5a5a';x.lineWidth=2;
-      x.beginPath();x.moveTo(n.x-r-3,n.y-r-3);x.lineTo(n.x+r+3,n.y+r+3);x.stroke()}
-    if(!dim){                                            // ラベルは重なったら省く
-      x.font='10.5px sans-serif';
-      const s=n.label.slice(0,15), w=x.measureText(s).width, bx=n.x+r+5, by=n.y-6;
-      if(n===sel||n===hov||!boxes.some(b=>bx<b.x+b.w+3&&bx+w+3>b.x&&by<b.y+b.h+2&&by+13>b.y)){
-        boxes.push({x:bx,y:by,w,h:13});
-        x.fillStyle=(n===sel||n===hov)?'#fff':'#b9bfc9'; x.fillText(s,bx,n.y+3.5);
-      }
-    }
-    x.globalAlpha=1;
-  }
-  x.restore();
-}
-function loop(){ step(); draw(); requestAnimationFrame(loop); }
-
-const hit = ev => { const mx=(ev.clientX-innerWidth/2-cam.x)/cam.z, my=(ev.clientY-innerHeight/2-cam.y)/cam.z;
-  return N.find(n=>Math.hypot(n.x-mx,n.y-my)<R(n)+5); };
-const tip=document.getElementById('tip');
-cv.onmousemove = e => {
-  hov=hit(e); cv.style.cursor=hov?'pointer':(drag?'grabbing':'grab');
-  if(drag){userMoved=true;cam.x+=e.movementX;cam.y+=e.movementY}
-  if(hov && !drag){
-    const rels = E.filter(z=>shown(z)&&(z.s===hov||z.t===hov))
-      .map(z=> z.s===hov ? `→ ${REL[z.rel].label}` : `← ${REL[z.rel].label}`);
-    const uniq = [...new Set(rels)];
-    tip.innerHTML =
-      `<span class="badge" style="background:${NODE[hov.type]}22;color:${NODE[hov.type]}">${NNAME[hov.type]||hov.type}</span>`
-      + (hov.status==='retracted'?` <span class="badge" style="background:#ff5a5a22;color:#ff5a5a">撤回済み</span>`:'')
-      + (hov.severity==='absolute'?` <span class="badge" style="background:#ffffff1a;color:#fff">絶対禁則</span>`:'')
-      + `<div class="ttl">${hov.label}</div>`
-      + `<div class="row"><b>id</b>${hov.id}</div>`
-      + (hov.provenance?`<div class="row"><b>出所</b>${PROV[hov.provenance]??hov.provenance}</div>`:'')
-      + (hov.confidence!=null?`<div class="row"><b>確信度</b>${hov.confidence}</div>`:'')
-      + (uniq.length?`<div class="row"><b>関係</b>${uniq.join(' · ')}</div>`:'')
-      + `<div class="row" style="margin-top:4px;opacity:.6">クリックで全文</div>`;
-    tip.style.display='block';
-    tip.style.left=Math.min(e.clientX+16, innerWidth-360)+'px';
-    tip.style.top=Math.min(e.clientY+16, innerHeight-tip.offsetHeight-12)+'px';
-  } else tip.style.display='none';
-};
-cv.onmouseleave=()=>tip.style.display='none';
-cv.onmousedown=()=>drag=true; addEventListener('mouseup',()=>drag=false);
-cv.onwheel = e => {e.preventDefault(); userMoved=true;
-  cam.z=Math.min(3,Math.max(.25,cam.z*(e.deltaY>0?.92:1.08)))};
-addEventListener('keydown', e => { if(e.key==='f'){alpha=.5;userMoved=false} });
-
-cv.onclick = async ev => {
-  const n=hit(ev), side=document.getElementById('side');
-  if(!n){ sel=null; side.classList.remove('on'); return; }
-  sel=n; side.classList.add('on');
-  document.getElementById('t').textContent=n.label;
-  document.getElementById('m').innerHTML =
-    `<span class="d" style="display:inline-block;background:${NODE[n.type]}"></span> ${NNAME[n.type]||n.type}`
-    + ` · <code>${n.id}</code> · ${n.status}` + (n.provenance?` · ${n.provenance}`:'')
-    + (n.confidence!=null?` · 確信度 ${n.confidence}`:'');
-  const d = await (await fetch('/api/node?id='+encodeURIComponent(n.id))).json();
-  const name = id => (N.find(z=>z.id===id)?.label ?? id);
-  const chip = (rel,dir,id) => `<div class="edge">
-    <b style="background:${REL[rel].color}22;color:${REL[rel].color}">${dir} ${REL[rel].label}</b>
-    <span>${name(id)} <code style="opacity:.5">${id}</code></span></div>`;
-  const ORDER = Object.keys(REL);                        // 構造関係を先に、言及は畳む
-  const group = (list, dir, key) => {
-    const st=[], mn=[];
-    list.filter(o=>REL[o.rel]).sort((a,b)=>ORDER.indexOf(a.rel)-ORDER.indexOf(b.rel))
-      .forEach(o=>(o.rel==='mentions'?mn:st).push(chip(o.rel,dir,o[key])));
-    if(!st.length && !mn.length) return '';
-    return `<div style="color:var(--dim);font-size:11px;margin:13px 0 2px">${dir==='→'?'このページから':'このページへ'}</div>`
-      + st.join('')
-      + (mn.length?`<details style="margin-top:3px"><summary style="color:var(--dim);font-size:11px;cursor:pointer;padding:3px 0">本文で言及 ${mn.length} 件</summary>${mn.join('')}</details>`:'');
-  };
-  document.getElementById('props').innerHTML = props(d.front ?? {});
-  document.getElementById('e').innerHTML = group(d.out,'→','dst') + group(d.in,'←','src');
-  document.getElementById('b').textContent=d.body;
+document.getElementById('copy').onclick = async (e) => {
+  const b = e.currentTarget;
+  try { await navigator.clipboard.writeText(document.getElementById('ep').textContent.trim()); }
+  catch { return; }                      // 権限が無い環境では黙って何もしない
+  b.textContent = 'コピーしました'; b.classList.add('done');
+  setTimeout(() => { b.textContent = 'コピー'; b.classList.remove('done'); }, 1600);
 };
 </script></body></html>
