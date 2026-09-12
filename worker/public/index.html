@@ -1,7 +1,7 @@
 <!doctype html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>virc — 手持ちのAIを、あなたを憶えているコーチにする</title>
-<meta name="description" content="Claude・ChatGPT・Gemini に接続して使う、ランニングコーチの記憶。">
+<title>VIRC — 手持ちのAIを、あなたを憶えているコーチにする</title>
+<meta name="description" content="Claude・ChatGPT・Gemini に繋いで使う、ランニングコーチの記憶。訊きたいときに、経緯を知っている相手に訊けます。">
 <style>
 :root{--bg:#0f1115;--fg:#e6e6e6;--dim:#a8aeb9;--faint:#8b8f98;--line:#2a2f3a;
   --panel:#151821;--accent:#5b8dee}
@@ -14,18 +14,20 @@ section{padding-block:56px;border-top:1px solid var(--line)}
 section:first-of-type{border-top:0}
 h1{font-size:28px;line-height:1.5;margin:0 0 18px;letter-spacing:-.01em}
 h2{font-size:17px;margin:0 0 22px;letter-spacing:.01em}
-h3{font-size:15px;margin:0 0 6px}
 p{color:var(--dim);margin:.7em 0}
 .lead{font-size:16px;color:var(--dim)}
-.mark{font-size:14px;font-weight:700;letter-spacing:.14em;color:var(--fg);
-  padding:22px 0 0;display:block}
+.mark{font-size:14px;font-weight:700;letter-spacing:.14em;padding:22px 0 0;display:block}
 .mark span{color:var(--accent)}
+.mark em{display:block;font:400 11px/1.6 -apple-system,sans-serif;
+  letter-spacing:.06em;color:var(--faint);margin-top:3px}
+.who{border-left:2px solid var(--accent);padding:2px 0 2px 14px;margin:26px 0 0}
+.who p{margin:0;font-size:14px;color:var(--dim)}
 
 /* 3つの特徴 */
 .feat{margin:26px 0 0;padding:0;list-style:none}
-.feat li{padding:16px 0;border-top:1px solid var(--line)}
+.feat li{padding:18px 0;border-top:1px solid var(--line)}
 .feat li p{margin:0;font-size:14px}
-.feat b{display:block;font-size:15px;color:var(--fg);margin-bottom:4px}
+.feat b{display:block;font-size:15px;color:var(--fg);margin-bottom:5px}
 
 /* エンドポイント */
 .url{display:flex;gap:10px;align-items:center;background:var(--panel);
@@ -44,14 +46,18 @@ button{font:inherit;cursor:pointer;border:0;border-radius:8px}
 .tab[aria-selected="true"]{background:#252a35;color:var(--fg);border-color:#3a4150}
 ol{color:var(--dim);padding-left:22px;margin:0;font-size:14px}
 ol li{margin:.5em 0}
-ol code{background:var(--panel);padding:2px 7px;border-radius:4px;
-  font:12.5px ui-monospace,monospace;color:#c8ccd4}
 .note{font-size:12.5px;color:var(--faint);margin-top:16px}
+
+/* データのこと */
+.data{margin:0;padding:0;list-style:none}
+.data li{font-size:14px;color:var(--dim);padding:7px 0 7px 20px;position:relative}
+.data li::before{content:"";position:absolute;left:0;top:14px;width:6px;height:6px;
+  border-radius:50%;background:#3a4150}
 
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 .btn{display:inline-block;background:var(--accent);color:#fff;
-  padding:11px 24px;border-radius:8px;font-size:14px;margin-top:8px}
+  padding:11px 24px;border-radius:8px;font-size:14px;margin-top:20px}
 .btn:hover{text-decoration:none;opacity:.92}
 footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
   color:var(--faint);display:flex;gap:18px;flex-wrap:wrap}
@@ -59,29 +65,35 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
 </style></head><body>
 <div class="wrap">
 
-  <span class="mark">VIR<span>C</span></span>
+  <span class="mark">VIR<span>C</span><em>Virtual Intelligent Running Coach</em></span>
 
   <section>
     <h1>手持ちのAIを、<br>あなたを憶えているコーチにする。</h1>
-    <p class="lead">virc は Claude・ChatGPT・Gemini に接続して使う、ランニングコーチの記憶です。新しいアプリを覚える必要はありません。いつも使っているAIが、そのままコーチになります。</p>
+    <p class="lead">VIRC は Claude・ChatGPT・Gemini に繋いで使います。新しいアプリは要りません。いつも使っているAIが、あなたの練習を憶えたまま話す相手になります。</p>
+    <div class="who">
+      <p>コーチがいる人にも、いない人にも。速さは問いません。自分がやっていることについて、訊きたいときに訊ける相手が要る人のための道具です。</p>
+    </div>
+    <a class="btn" href="#connect">接続する</a>
   </section>
 
   <section>
-    <h2>毎回、説明し直していませんか</h2>
-    <p>AIにトレーニングの相談をすると、前回何を試したか、何が効かなかったか、どこを故障したか、どの曜日は走れないかを、そのつど話すことになります。会話が終われば、すべて忘れられます。</p>
-    <p>virc を繋ぐと、AIはそれを憶えたまま話せるようになります。</p>
+    <h2>疑問が浮かぶのは、訊ける場所の外です</h2>
+    <p>この設定でよかったのか、脚の違和感は休むほどのものか、来週は落とすべきか。疑問はたいてい、練習の途中か終わった直後に浮かびます。そしてその瞬間、自分の経緯を知っている相手は、たいていそばにいません。</p>
+    <p>コーチがいても、次に会うまでは持ち越しです。練習会の場で、その時に適切な質問ができるとも限りません。コーチがいなければ、調べて出てくるのは、あなたの事情を知らない一般論です。どちらにしても、家に着く頃には訊こうとしていたこと自体を忘れています。</p>
+    <p>AIに相談すれば、いつでも答えは返ってきます。ただし毎回、前回何を試したか、何が効かなかったか、どこを故障したか、どの曜日は走れないかを、一から話し直すことになります。会話が終われば、すべて忘れられます。</p>
+    <p>VIRC を繋ぐと、その説明が要らなくなります。</p>
 
     <ul class="feat">
-      <li><b>憶える</b>
-        <p>走れない曜日、過去の故障、暑い日の心拍の出方。一度話せば、次から前提になります。</p></li>
-      <li><b>根拠が残る</b>
-        <p>実測なのか、自己申告なのか、推論なのか。どこから来た情報かを区別して持ちます。強い根拠を弱い根拠で上書きしません。</p></li>
-      <li><b>答え合わせをする</b>
-        <p>「こうなるはず」を予測として残し、期日が来たら結果を訊きます。外れたときは、練習ではなく前提の方を直します。</p></li>
+      <li><b>二度目からは、前提を共有できている</b>
+        <p>走れない曜日、過去の故障、暑い日の心拍の出方。一度話せば、次からは前提として扱われます。思い出させる手間が消えます。</p></li>
+      <li><b>使うほど、外さなくなる</b>
+        <p>提案には「こうなるはず」という予測と、外れたと判断する条件が必ず付きます。期日が来れば結果を訊かれ、外れていたときは練習ではなく前提の方が直ります。溜まるほど、あなたに合っていきます。</p></li>
+      <li><b>思いつきで方針が変わらない</b>
+        <p>実測なのか、自己申告なのか、推論なのか。どこから来た情報かを区別して持ち、強い根拠を弱い根拠で上書きしません。前に決めたことを見ずに処方しません。</p></li>
     </ul>
   </section>
 
-  <section>
+  <section id="connect">
     <h2>接続する</h2>
     <p>このURLを、お使いのAIのコネクタ設定に貼るだけです。</p>
     <div class="url">
@@ -100,9 +112,19 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
   </section>
 
   <section>
+    <h2>データのこと</h2>
+    <ul class="data">
+      <li>Googleログインは本人確認にだけ使います。受け取るのはメールアドレスと表示名だけで、メールやカレンダーには触れません。</li>
+      <li>記録はあなた専用の領域に保存されます。他の利用者のデータと混ざることはありません。</li>
+      <li>接続したAIは、いつでも<a href="/connections">接続中のアプリ</a>から解除できます。</li>
+    </ul>
+    <p class="note">Garmin や Strava が記録するのは、走った結果です。VIRC が憶えるのは、何をなぜ決めて、それがどうなったか。どちらかがあれば足りるというものではありません。</p>
+  </section>
+
+  <section>
     <h2>最初の一歩</h2>
-    <p>接続したら、「コーチして」と話しかけてください。はじめの数回は質問が多めです —— 走れる曜日、直近のレース、故障の履歴。答えるほど、次回からの提案が具体的になります。</p>
-    <a class="btn" href="/login">Googleでログインして始める</a>
+    <p>接続したら、「コーチして」と話しかけてください。はじめの数回は質問が多めです —— 走れる曜日、直近のレース、故障の履歴。答えるほど、次からの提案が具体的になります。</p>
+    <a class="btn" href="#connect">接続する</a>
   </section>
 
   <footer>
