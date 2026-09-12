@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
-const HOST = process.argv[2] || process.env.COACH_HOST || 'https://coach-graph.nidstyle3.workers.dev';
+const HOST = process.argv[2] || process.env.COACH_HOST || 'https://connect.virc.run';
 const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.coach-token');
 const b64 = (b) => b.toString('base64url');
 const verifier = b64(crypto.randomBytes(32));

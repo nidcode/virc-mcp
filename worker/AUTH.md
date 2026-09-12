@@ -85,13 +85,17 @@ IdP を足したり替えたりすると subject が変わるため、直結に�
 ### 済み（2026-08-23）
 
 ```
-URL       https://coach-graph.nidstyle3.workers.dev
+URL       https://connect.virc.run
 KV        OAUTH_KV   594d33ece479464ba9f0ee7ef235a1b9
 D1        coach-users e700a6a2-d890-42d8-b12c-7dc601bd2924（athletes / identities 作成済み）
-ISSUER    https://coach-graph.nidstyle3.workers.dev
+ISSUER    https://connect.virc.run
 ```
 
 Google OAuth 設定済み（2026-08-28）。ログイン → 選手作成 → ウィキ移行まで確認済み。
+
+入口は `connect.virc.run` だけです（2026-09-12）。`workers_dev` とバージョンの
+プレビューURLは閉じてあります —— `redirect_uri` は `${ISSUER}/callback` 固定なので、
+別オリジンから入るとログインが戻ってこられないためです。
 
 ### CLI から本番を触る
 
@@ -117,7 +121,7 @@ COACH_PROD=1 node coach-memory/tools/seed.js   # 本番の自分の DO に投入
    「OAuth クライアント ID を作成」→ **ウェブアプリケーション**
 2. **承認済みのリダイレクト URI** に次を登録（末尾のスラッシュ無し）:
    ```
-   https://coach-graph.nidstyle3.workers.dev/callback
+   https://connect.virc.run/callback
    ```
 3. OAuth 同意画面: 外部 / スコープは `openid` `email` `profile` の3つだけ
 4. 発行された値を Secrets に入れる:

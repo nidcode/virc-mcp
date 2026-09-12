@@ -7,6 +7,11 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": "./public", "binding": "ASSETS", "not_found_handling": "none" },
 
+  // 入口は connect.virc.run だけ。workers.dev 経由で入れると ISSUER と
+  // ホストが食い違い、OAuth の redirect_uri が別オリジンを指すことになる。
+  "workers_dev": false,
+  "preview_urls": false,
+
   "durable_objects": {
     "bindings": [{ "name": "GRAPH", "class_name": "AthleteGraph" }]
   },
@@ -27,7 +32,7 @@
   //   ローカル専用フラグが本番に紛れ込む事故を招くため。
   //   DEV_AUTH_BYPASS はここに書かない。.dev.vars にだけ置く。
   "vars": {
-    "ISSUER": "https://coach-graph.nidstyle3.workers.dev"
+    "ISSUER": "https://connect.virc.run"
   },
 
   "observability": { "enabled": true }
