@@ -41,7 +41,10 @@ button{font:inherit;cursor:pointer;border:0;border-radius:8px}
 .copy.done{background:#22c55e}
 
 /* タブ */
+.pick{font-size:14px;margin:0 0 12px}
+.pick b{color:var(--fg)}
 .tabs{display:flex;gap:6px;margin:0 0 18px;flex-wrap:wrap}
+.rec{font-size:10.5px;font-weight:600;color:var(--accent);margin-left:7px}
 .tab{background:var(--panel);color:var(--dim);border:1px solid var(--line);
   padding:8px 18px;font-size:14px}
 .tab[aria-selected="true"]{background:#26262b;color:var(--fg);border-color:#3c3c42}
@@ -106,8 +109,10 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
       <button class="copy" id="copy">コピー</button>
     </div>
 
+    <p class="pick">日本からは <b>Claude</b> が最短です。無料プランでも追加できます。</p>
+
     <div class="tabs" role="tablist">
-      <button class="tab" role="tab" aria-selected="true"  data-t="claude">Claude</button>
+      <button class="tab" role="tab" aria-selected="true"  data-t="claude">Claude<span class="rec">おすすめ</span></button>
       <button class="tab" role="tab" aria-selected="false" data-t="chatgpt">ChatGPT</button>
       <button class="tab" role="tab" aria-selected="false" data-t="gemini">Gemini</button>
     </div>
