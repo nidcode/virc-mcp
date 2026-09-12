@@ -192,7 +192,7 @@ export const siteHandler = {
     if (u.pathname === '/login') {
       if (!google.configured(env)) return page('未設定', `<h1>Google OAuth が未設定です</h1>`);
       const state = crypto.randomUUID();
-      await env.OAUTH_KV.put(`login:${state}`, JSON.stringify({ url: '/' }), { expirationTtl: 600 });
+      await env.OAUTH_KV.put(`login:${state}`, JSON.stringify({ url: '/graph' }), { expirationTtl: 600 });
       return Response.redirect(google.authUrl(env, state), 302);
     }
 
