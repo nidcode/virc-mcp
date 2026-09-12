@@ -109,7 +109,9 @@ const shown = e => REL[e.rel].on;
 
 (async () => {
   const res = await fetch('/api/graph');
-  if (!res.ok) { location.href = (await res.json().catch(()=>({}))).login || '/login'; return; }
+  if (res.status === 401) { location.href = '/login'; return; }
+  // 401 以外で /login に送ると、戻ってきて同じ失敗を踏む無限往復になる
+  if (!res.ok) { document.getElementById('stat').textContent = `読み込みに失敗しました（${res.status}）`; return; }
   const g = await res.json();
   const deg={}; for(const e of g.edges){deg[e.source]=(deg[e.source]||0)+1;deg[e.target]=(deg[e.target]||0)+1}
   N = g.nodes.map((n,i)=>({...n, deg:deg[n.id]||0,
