@@ -48,6 +48,8 @@ button{font:inherit;cursor:pointer;border:0;border-radius:8px}
 ol{color:var(--dim);padding-left:22px;margin:0;font-size:14px}
 ol li{margin:.5em 0}
 .note{font-size:12.5px;color:var(--faint);margin-top:16px}
+.warn{font-size:13px;color:var(--dim);background:var(--panel);border-left:2px solid var(--accent);
+  border-radius:0 6px 6px 0;padding:10px 14px;margin:0 0 16px}
 
 /* データのこと */
 .data{margin:0;padding:0;list-style:none}
@@ -70,7 +72,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
 
   <section>
     <h1>あなたを憶えている<br>ランニングコーチです。</h1>
-    <p class="lead">アプリではありません。いつも使っているAI（Claude・ChatGPT・Gemini）に繋いで使います。</p>
+    <p class="lead">アプリではありません。いつも使っているAI（Claude・ChatGPT）に繋いで使います。</p>
     <a class="btn" href="#connect">接続する</a>
   </section>
 
@@ -110,6 +112,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
       <button class="tab" role="tab" aria-selected="false" data-t="gemini">Gemini</button>
     </div>
 
+    <p class="warn" id="plead" hidden></p>
     <ol id="steps"></ol>
     <p class="note" id="pnote"></p>
     <p class="note">Googleは本人確認に使うだけです（受け取るのはメールアドレスと表示名のみ）。接続は<a href="/connections">いつでも解除</a>できます。</p>
@@ -145,17 +148,21 @@ const STEPS = {
     note: 'Plus・Pro・Business などの有料プランのウェブ版のみ。開発者モードを先に有効にしないと、追加する画面にたどり着けません。',
   },
   gemini: {
+    lead: '現在、日本からは追加できません。Google側の提供条件が「米国在住」に限られているためです。以下は条件を満たす場合の手順です。',
     steps: ['「設定とヘルプ」→「接続済みのアプリ」を開く',
       '「Spark 用のカスタムアプリ」から「カスタムアプリを追加」を選ぶ',
       '上のURLを貼って「次へ」',
       '「Googleでログイン」を押す。以上です'],
-    note: '18歳以上・米国在住・個人のGoogleアカウント・Gemini Spark の利用権が揃っている場合のみ追加できます（追加はウェブ版のみ）。日本からは現時点で使えません。',
+    note: '条件は、18歳以上・米国在住・個人のGoogleアカウント・Gemini Spark の利用権の4つすべて。追加はウェブ版のみです。',
   },
 };
-const steps = document.getElementById('steps'), pnote = document.getElementById('pnote');
+const steps = document.getElementById('steps'), pnote = document.getElementById('pnote'),
+      plead = document.getElementById('plead');
 const show = k => {
   steps.innerHTML = STEPS[k].steps.map(s => `<li>${s}</li>`).join('');
   pnote.textContent = STEPS[k].note;
+  plead.textContent = STEPS[k].lead ?? '';
+  plead.hidden = !STEPS[k].lead;
 };
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(o => o.setAttribute('aria-selected', o === t));
