@@ -108,7 +108,9 @@ addEventListener('resize',()=>{fitc(); if(!userMoved) fitView(); draw();}); fitc
 const shown = e => REL[e.rel].on;
 
 (async () => {
-  const g = await (await fetch('/api/graph')).json();
+  const res = await fetch('/api/graph');
+  if (!res.ok) { location.href = (await res.json().catch(()=>({}))).login || '/login'; return; }
+  const g = await res.json();
   const deg={}; for(const e of g.edges){deg[e.source]=(deg[e.source]||0)+1;deg[e.target]=(deg[e.target]||0)+1}
   N = g.nodes.map((n,i)=>({...n, deg:deg[n.id]||0,
     x:Math.cos(i/g.nodes.length*6.283)*240+(Math.random()-.5)*30,
