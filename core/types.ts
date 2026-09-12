@@ -197,6 +197,18 @@ export interface LogEntry {
   ts: string; kind: string; title: string; detail?: string | null;
 }
 
+/**
+ * ★セッション単位の生ログ。`log_session` ツールが書き込む。
+ * 書き込み専用 — コーチングの生存パスからは読まない（MCPツールとしては公開しない）。
+ * 将来スキーマを変えて再抽出するための唯一の corpus なので、削らず・上書きしない。
+ */
+export interface RawEntry {
+  id: string;          // 'YYYY-MM-DD-session-NN'
+  date: string;        // 'YYYY-MM-DD'
+  transcript: string;
+  created_at: string;  // ISO
+}
+
 export interface PutOptions { name?: string }
 
 /**
@@ -236,6 +248,10 @@ export interface Store {
   lastBriefingAt(): MaybePromise<string | null>;
   /** ローカル版のみ。index.md の再生成。 */
   reindex?(): MaybePromise<number>;
+  /** ★セッションの生ログを追記専用で保存する。上書き禁止。 */
+  putRaw(entry: { date: string; transcript: string }): MaybePromise<{ id: string }>;
+  /** ★オフラインの再抽出・監査用。MCPツールとしては公開しない。 */
+  listRaw(): MaybePromise<RawEntry[]>;
 }
 
 export interface ToolDef {
