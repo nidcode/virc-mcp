@@ -108,7 +108,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
     </div>
 
     <ol id="steps"></ol>
-    <p class="note">メニューの名称はアプリの版によって少し違うことがあります。「コネクタ」「Connectors」「MCP」のいずれかの項目を探してください。</p>
+    <p class="note" id="pnote"></p>
   </section>
 
   <section>
@@ -136,21 +136,33 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;
 
 <script>
 const STEPS = {
-  claude: ['設定 → コネクタ を開く',
-    'カスタムコネクタを追加 を選ぶ',
-    '上のURLを貼って追加する',
-    '「Googleでログイン」を押す。以上です'],
-  chatgpt: ['設定 → コネクタ を開く',
-    '新しいコネクタを追加 を選ぶ',
-    '上のURLを貼って追加する',
-    '「Googleでログイン」を押す。以上です'],
-  gemini: ['設定からコネクタ（MCP）の項目を開く',
-    '新しい接続を追加 を選ぶ',
-    '上のURLを貼って追加する',
-    '「Googleでログイン」を押す。以上です'],
+  claude: {
+    steps: ['「カスタマイズ」→「コネクタ」を開く',
+      '「+」→「カスタムコネクタを追加」を選ぶ',
+      '上のURLを貼って追加する',
+      '「Googleでログイン」を押す。以上です'],
+    note: '無料プランでも使えます。Team・Enterprise では、管理者が先に組織の設定から追加する必要があります。',
+  },
+  chatgpt: {
+    steps: ['設定 →「セキュリティとログイン」で「開発者モード」をオンにする',
+      '<a href="https://chatgpt.com/plugins">chatgpt.com/plugins</a> を開いて「+」を押す',
+      '名前と説明を入れ、接続先に上のURLを貼る',
+      '「Googleでログイン」を押す。以上です'],
+    note: 'Plus・Pro・Business などの有料プランのウェブ版のみ。開発者モードを先に有効にしないと、追加する画面にたどり着けません。',
+  },
+  gemini: {
+    steps: ['「設定とヘルプ」→「接続済みのアプリ」を開く',
+      '「Spark 用のカスタムアプリ」から「カスタムアプリを追加」を選ぶ',
+      '上のURLを貼って「次へ」',
+      '「Googleでログイン」を押す。以上です'],
+    note: '18歳以上・米国在住・個人のGoogleアカウント・Gemini Spark の利用権が揃っている場合のみ追加できます（追加はウェブ版のみ）。日本からは現時点で使えません。',
+  },
 };
-const steps = document.getElementById('steps');
-const show = k => steps.innerHTML = STEPS[k].map(s => `<li>${s}</li>`).join('');
+const steps = document.getElementById('steps'), pnote = document.getElementById('pnote');
+const show = k => {
+  steps.innerHTML = STEPS[k].steps.map(s => `<li>${s}</li>`).join('');
+  pnote.textContent = STEPS[k].note;
+};
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(o => o.setAttribute('aria-selected', o === t));
   show(t.dataset.t);
